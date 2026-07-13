@@ -5,3 +5,6 @@ dist
 .dev.vars
 *.local
 .DS_Store
+
+# ccrun state (per-machine, not versioned)
+.ccrun/
