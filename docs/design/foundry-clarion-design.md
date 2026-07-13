@@ -1,22 +1,28 @@
-# Foundry Connect — Architecture & Design
+# Foundry Clarion — Architecture & Design
 
-> **Status:** Draft for Steven's review (2026-07-13). Produced autonomously per `/goal`.
-> **Author:** Connect agent (Claude Code session in `foundry-connect`).
-> **How to read this:** §1 is the summary. §2 lists the places where reality (as
-> found in the sibling repos) diverges from `CLAUDE.md` and needs your sign-off —
-> **read that first.** §3 onward is the design. The companion implementation plan
-> is `docs/superpowers/plans/2026-07-13-foundry-connect-phase-0-1.md`. The
-> decision summary you asked to review is `docs/reports/2026-07-13-plan-and-design-report.md`.
+> **Status:** Decisions locked 2026-07-13 (walked through with Steven). Renamed from
+> "Foundry Connect" to **Foundry Clarion** to avoid confusion with Amazon Connect.
+> **Author:** Clarion agent (Claude Code session in `foundry-clarion`).
+> **How to read this:** §1 is the summary. §2 records where reality (from the sibling
+> repos) diverged from the original `CLAUDE.md` and what we decided. §3 onward is the
+> design. Companion plan: `docs/superpowers/plans/2026-07-13-foundry-clarion-phase-0-1.md`.
+>
+> **Locked decisions (2026-07-13):** ① Clarion owns its own D1 (`foundry-clarion-db`) +
+> read-only bind of Workspace's D1; agents = Workspace **resources linked by email**, skills
+> snapshotted for routing. ② Stateless JWKS auth via `@foundry/auth`. ③ Clarion roles in
+> `cc_members`. ④ One shared TaskRouter workspace, tenant-tagged, **logical + defense-in-depth**
+> isolation. ⑤ **Durable Object realtime from the start** (per-org hub). ⑥ v1 = inbound +
+> click-to-call.
 
 ---
 
 ## 1. Summary
 
-Foundry Connect is a CCaaS product for the Foundry family (`connect.foundry-ns.com`),
+Foundry Clarion is a CCaaS product for the Foundry family (`clarion.foundry-ns.com`),
 built as a **Cloudflare Pages + Pages Functions (Hono) + D1 + R2** app with a **React 19
 + Vite + Tailwind v4** frontend — mirroring Skills Foundry (Workspace) and AuthPak exactly.
 It puts a **custom agent UI on top of raw Twilio** (TaskRouter, Voice, Programmable Voice
-browser SDK) — **no Flex**. Authentication is **not built here**: Connect verifies the
+browser SDK) — **no Flex**. Authentication is **not built here**: Clarion verifies the
 AuthPak `fnd_session` JWT statelessly via JWKS using the vendored `@foundry/auth` package,
 exactly as Workspace already does.
 
@@ -27,15 +33,16 @@ be inaccurate against the actual code; those are called out in §2 and drive the
 
 ---
 
-## 2. Corrections to CLAUDE.md (need your sign-off)
+## 2. Corrections to CLAUDE.md (now decided — 2026-07-13)
 
 `CLAUDE.md` was written before AuthPak and Workspace reached their current shape. The
-following are grounded in the sibling repos as they exist today. **Items marked 🔴 change a
-"locked" decision and should not be treated as settled until you confirm.**
+following are grounded in the sibling repos as they exist today. Items that changed a
+"locked" decision were **walked through with Steven on 2026-07-13 and are now settled**;
+CLAUDE.md §2/§5/§6/§7/§9/§11 have been updated to match.
 
 ### 2.1 🔴 There is no shared users table and no shared D1 to FK into
 
-`CLAUDE.md` §2 & §6 say: *"Shared Cloudflare D1 database with Workspace. Connect reads
+`CLAUDE.md` §2 & §6 say: *"Shared Cloudflare D1 database with Workspace. Clarion reads
 Workspace's `users`, `orgs`, `roles` tables directly… queue membership is a real FK to
 `users.id`."*
 
@@ -65,16 +72,32 @@ CREATE TABLE IF NOT EXISTS org_directory (
 );
 ```
 
-**Recommendation:** Connect owns its **own D1** (`foundry-connect-db`), mirrors the
+**Recommendation:** Clarion owns its **own D1** (`foundry-clarion-db`), mirrors the
 `org_directory` pattern, scopes every row by `organization_id TEXT` (the AuthPak org id,
 e.g. `org_legacy`), and stores the AuthPak `user_id` (JWT `sub`, TEXT) as a **logical
 reference, not an enforced FK**. This matches AuthPak and Workspace, respects the
-multi-agent contract (Connect must never migrate Workspace's DB), and is the only option
+multi-agent contract (Clarion must never migrate Workspace's DB), and is the only option
 that actually works given D1 isolation.
 
-**What I need from you:** confirm Connect gets its own D1. If you truly want one physical
-D1 shared across apps, that is a larger cross-repo decision (Workspace and AuthPak already
-have their own) and I'd stop and spec it rather than assume it.
+**DECIDED:** Clarion owns its own D1 (`foundry-clarion-db`).
+
+**But agents *are* Workspace resources — linked by email, with a read-only Workspace DB
+binding.** The clarifying point Steven raised: the people who act as Clarion agents are the
+existing Workspace `resources`. That works and is genuinely "shared resources," via three facts:
+- **The join key is email.** Workspace itself maps a logged-in user to a `resources` row by
+  `lower(claims.email) = lower(resources.email)` (see `skills-foundry/server/lib/grants.ts`,
+  `groups.ts`, `approvers.ts`). Clarion uses the same key: `cc_agents.email` + `workspace_resource_id`.
+- **A single D1 can be bound to multiple apps.** Clarion binds `skills-foundry-db` **read-only**
+  as a second binding (`WORKSPACE_DB`) to (a) let an admin pick from Workspace resources when
+  enabling an agent and (b) read their skills. Reading is allowed; the contract only forbids
+  *commits/migrations* to Workspace. **Clarion never writes to `WORKSPACE_DB`.**
+- **Live routing uses a Clarion-owned snapshot, not a live cross-DB read.** At "enable as agent"
+  time, Clarion copies the resource's skills into `cc_agent_skills` (re-syncable). So a live call
+  never waits on Workspace's DB, and Clarion is resilient to Workspace downtime. (D1 cannot JOIN
+  across two databases anyway — you read each binding and join in app code.)
+
+What is *not* possible: putting Clarion's `cc_*` tables inside Workspace's DB (contract +
+independent migrations), or a single physical DB serving both apps. Each app owns its own D1.
 
 ### 2.2 🔴 Auth is stateless JWKS verification, not a server-to-server verify call
 
@@ -100,17 +123,17 @@ Consequences for our env/design:
   `auth.foundry-ns.com`).
 - JWT audience is **`foundry-ns`**; issuer `https://authpak.foundry-ns.com`.
 
-### 2.3 🟢 Connect's own roles must live in a Connect table (resolves open question §11-Q1)
+### 2.3 🟢 Clarion's own roles must live in a Clarion table (resolves open question §11-Q1)
 
 The `fnd_session` JWT only carries the **org-level** role (`owner` | `admin` | `member`).
-It does **not** carry `connect:admin` / `connect:supervisor` / `connect:agent`. AuthPak's
+It does **not** carry `clarion:admin` / `clarion:supervisor` / `clarion:agent`. AuthPak's
 SPEC is explicit that per-app entitlements are the consuming app's job (SPEC §10). So
-Connect's roles **must** live in a Connect-owned table, keyed by `(organization_id,
-user_id)`. This closes CLAUDE.md open question §11 Q1: **Connect roles live in Connect.**
+Clarion's roles **must** live in a Clarion-owned table, keyed by `(organization_id,
+user_id)`. This closes CLAUDE.md open question §11 Q1: **Clarion roles live in Clarion.**
 
-Mapping we'll use: AuthPak `owner`/`admin` → bootstrapped as Connect `admin` on first
-access (so an org owner can always administer Connect); everyone else defaults to no
-Connect access until an admin grants a Connect role.
+Mapping we'll use: AuthPak `owner`/`admin` → bootstrapped as Clarion `admin` on first
+access (so an org owner can always administer Clarion); everyone else defaults to no
+Clarion access until an admin grants a Clarion role.
 
 ### 2.4 🟢 "Workspace" is `workspace.foundry-ns.com` (repo stays `skills-foundry`)
 
@@ -141,9 +164,9 @@ From `skills-foundry/package.json`, `wrangler.jsonc`, and `authpak/SPEC.md` §3:
 
 The `foundry` repo (public site `foundry-ns.com`) already implements Twilio Voice IVR in
 `worker/index.ts`: office-hours dial-through, out-of-hours voicemail with transcription
-email, TwiML responses, and it holds `TWILIO_AUTH_TOKEN` / `TWILIO_ACCOUNT_SID`. Connect is
+email, TwiML responses, and it holds `TWILIO_AUTH_TOKEN` / `TWILIO_ACCOUNT_SID`. Clarion is
 the productised, multi-tenant version of that. Useful as a reference for TwiML shape and
-webhook signature validation, **but Connect does not share its worker or its `chat-logs`
+webhook signature validation, **but Clarion does not share its worker or its `chat-logs`
 D1** — it's a separate app.
 
 ---
@@ -154,12 +177,12 @@ D1** — it's a separate app.
                          Browser (agent / supervisor / admin)
                                      │  fnd_session cookie (.foundry-ns.com)
                                      ▼
-   ┌──────────────────────── connect.foundry-ns.com ─────────────────────────┐
+   ┌──────────────────────── clarion.foundry-ns.com ─────────────────────────┐
    │  Cloudflare Pages (React SPA)  +  Pages Functions (Hono, server/)         │
    │    • verifyFoundrySession() via AuthPak JWKS (stateless)                  │
    │    • mints short-lived Twilio Access Tokens (Voice + TaskRouter grants)   │
-   │    • owns foundry-connect-db (D1) + recordings bucket (R2)                │
-   │    • (v0.2) per-org Durable Object realtime hub                           │
+   │    • owns foundry-clarion-db (D1) + read-only bind of skills-foundry-db   │
+   │    • recordings bucket (R2) + per-org Durable Object realtime hub         │
    └───────┬───────────────────────┬───────────────────────┬─────────────────┘
            │ JWKS (cached)          │ Twilio REST + webhooks │ browser softphone
            ▼                        ▼                        ▼
@@ -168,26 +191,27 @@ D1** — it's a separate app.
     members)                   Conversations)           agent's browser
 ```
 
-- **Identity** comes only from the JWT. Connect never sees a password.
-- **Tenant scope** is `organization_id` (AuthPak org id) on every Connect row and every
+- **Identity** comes only from the JWT. Clarion never sees a password.
+- **Tenant scope** is `organization_id` (AuthPak org id) on every Clarion row and every
   Twilio TaskRouter attribute.
-- **Which users exist in an org** (to pick who to enable as an agent) is answered by
-  AuthPak's `GET /api/organizations/:id/members` (SPEC §6) — see §7.4 for the auth wrinkle.
+- **Who can be enabled as an agent** = the org's **Workspace resources**, read from the
+  read-only `WORKSPACE_DB` binding and matched to a login by **email**. (AuthPak's
+  `GET /api/organizations/:id/members` is an alternative source for pure logins — see §7.4.)
 
 ---
 
-## 4. Data model (`foundry-connect-db`)
+## 4. Data model (`foundry-clarion-db`)
 
-All Connect tables are prefixed `cc_`. `organization_id` and `user_id` are **TEXT**
-(AuthPak ids). No cross-database foreign keys. Within Connect, FKs are used normally.
+All Clarion tables are prefixed `cc_`. `organization_id` and `user_id` are **TEXT**
+(AuthPak ids). No cross-database foreign keys. Within Clarion, FKs are used normally.
 
 | Table | Purpose | Key columns |
 |---|---|---|
 | `cc_org_directory` | Tenant directory, accreted from JWT claims (mirrors Workspace) | `organization_id` PK, `name`, `slug`, `owner_email`, `disabled`, `first_seen`, `last_seen` |
-| `cc_members` | **Connect roles** per user (resolves §2.3) | `organization_id`, `user_id`, `connect_role` CHECK in (`admin`,`supervisor`,`agent`), `created_at`, UNIQUE(`organization_id`,`user_id`) |
-| `cc_agents` | A member enabled as a live agent (Twilio Worker mapping) | `id` PK, `organization_id`, `user_id`, `twilio_worker_sid`, `status`, `activity_sid`, `enabled_at` |
-| `cc_skills` | Skill catalog per org | `id` PK, `organization_id`, `name` |
-| `cc_agent_skills` | Skills-based routing assignments | `agent_id`, `skill_id`, `proficiency`, UNIQUE(`agent_id`,`skill_id`) |
+| `cc_members` | **Clarion roles** per user (resolves §2.3) | `organization_id`, `user_id`, `clarion_role` CHECK in (`admin`,`supervisor`,`agent`), `created_at`, UNIQUE(`organization_id`,`user_id`) |
+| `cc_agents` | A member enabled as a live agent; **linked to a Workspace resource by email** | `id` PK, `organization_id`, `user_id`, `email`, `workspace_resource_id`, `twilio_worker_sid`, `status`, `activity_sid`, `enabled_at` |
+| `cc_skills` | Skill catalog per org (may be seeded from Workspace skill names) | `id` PK, `organization_id`, `name` |
+| `cc_agent_skills` | Skills for routing — **snapshotted from Workspace at enable-time**, re-syncable | `agent_id`, `skill_id`, `proficiency`, `synced_at`, UNIQUE(`agent_id`,`skill_id`) |
 | `cc_queues` | Call queues (TaskRouter Workflow targets) | `id` PK, `organization_id`, `name`, `twilio_workflow_sid`, `strategy` |
 | `cc_queue_members` | Agents in queues | `queue_id`, `agent_id`, `priority`, UNIQUE(`queue_id`,`agent_id`) |
 | `cc_hunt_groups` | Simple ring groups | `id` PK, `organization_id`, `name`, `strategy` (`ring-all`/`round-robin`) |
@@ -197,9 +221,15 @@ All Connect tables are prefixed `cc_`. `organization_id` and `user_id` are **TEX
 | `cc_recordings` | Recording metadata (audio in R2) | `id` PK, `call_id`, `r2_key`, `duration_s`, `transcript_r2_key`, `created_at` |
 | `cc_audit_log` | Who changed what (mirror Workspace's audit table) | `id` PK, `organization_id`, `user_id`, `action`, `meta_json`, `created_at` |
 
+**Read-only Workspace binding:** `wrangler.jsonc` binds `skills-foundry-db` as a second D1
+binding named `WORKSPACE_DB`. Clarion reads `resources` + `resource_sub_skills` (scoped to the
+caller's org via `departments.organization_id`) to pick agents and snapshot skills. It **never
+writes** to `WORKSPACE_DB`. Own data lives in the `DB` binding (`foundry-clarion-db`).
+
 **Conventions (from CLAUDE.md §10, matched to Workspace):**
 - Every table gets a typed accessor in `src/db/<table>.ts` — no raw SQL in handlers.
-- Every query filters by `organization_id`. A shared `scopedDb(orgId)` helper enforces it.
+- Every query filters by `organization_id`. A shared `scopedDb(orgId)` helper enforces it, and
+  cross-tenant leak tests assert a query for org A never returns org B's rows.
 - Recording audio + transcripts live in **R2**; D1 holds only metadata + R2 keys.
 - Route handler order is fixed: **input validation → auth check → business logic → response.**
 - Errors are JSON `{ error: { code, message } }`; never leak stack traces. (Note: Workspace
@@ -217,48 +247,56 @@ Every `/api/*` request (Hono middleware, mirroring `skills-foundry/server/app.ts
    `POST /api/token/refresh` once before giving up — same as Workspace.)
 3. Set context: `user = { id: sub, email, emailVerified, name }`, `orgId = claims.org_id`,
    `role = claims.role` (the **org** role).
-4. **Touch `cc_org_directory`** (upsert `last_seen`, `name`, `owner_email`) so Connect
+4. **Touch `cc_org_directory`** (upsert `last_seen`, `name`, `owner_email`) so Clarion
    accumulates its tenant list. Refuse if `disabled = 1`.
-5. **Resolve Connect role** from `cc_members`. If the user is an org `owner`/`admin` and has
-   no `cc_members` row, auto-provision them as Connect `admin` (bootstrap). Otherwise, no
-   Connect role → `403 connect_no_access` (SPA shows a "request access" screen).
+5. **Resolve Clarion role** from `cc_members`. If the user is an org `owner`/`admin` and has
+   no `cc_members` row, auto-provision them as Clarion `admin` (bootstrap). Otherwise, no
+   Clarion role → `403 clarion_no_access` (SPA shows a "request access" screen).
 6. Authorization guards per route:
-   - `requireConnectRole('admin')` — provisioning (queues, numbers, enabling agents).
-   - `requireConnectRole('supervisor')` — org-wide queue visibility, monitor/whisper/barge.
-   - `requireConnectRole('agent')` — softphone, take calls, own state only.
+   - `requireClarionRole('admin')` — provisioning (queues, numbers, enabling agents).
+   - `requireClarionRole('supervisor')` — org-wide queue visibility, monitor/whisper/barge.
+   - `requireClarionRole('agent')` — softphone, take calls, own state only.
 
 A public `GET /api/auth-status` (mounted **before** the enforce gate, like Workspace) tells
-the SPA how to route: logged-out → marketing/login, logged-in-without-Connect-role →
+the SPA how to route: logged-out → marketing/login, logged-in-without-Clarion-role →
 request-access, agent/supervisor/admin → the app.
 
 ---
 
 ## 6. Twilio integration & the recommendations you asked me to make
 
-Because we chose the custom-UI path, Connect drives Twilio's primitives directly. The open
+Because we chose the custom-UI path, Clarion drives Twilio's primitives directly. The open
 questions in CLAUDE.md §11 get concrete recommendations here.
 
-### 6.1 One shared TaskRouter Workspace, tenant-tagged (recommend) — CLAUDE.md §11-Q2
+### 6.1 One shared TaskRouter Workspace, tenant-tagged — DECIDED; isolation = defense-in-depth
 
-**Recommendation: a single Twilio TaskRouter Workspace for all Foundry orgs**, with every
-Worker, Workflow (queue), TaskQueue, and Task carrying an `organization_id` attribute.
-Routing expressions and every REST query filter on it.
+**Decision: a single Twilio TaskRouter Workspace for all Foundry orgs**, with every Worker,
+Workflow (queue), TaskQueue, and Task carrying an `organization_id` attribute. Routing
+expressions and every REST query filter on it.
 
-- *Why not one workspace per org:* TaskRouter Workspaces are heavyweight account-level
-  objects; one-per-tenant multiplies management, webhook wiring, and the risk of hitting
-  account limits, for no isolation benefit a disciplined attribute filter doesn't give us
-  at this scale (small-to-mid contact centres).
-- *The cost:* isolation is now **logical** — a missing `organization_id` filter could leak
-  across tenants. We mitigate with a single `taskrouterScoped(orgId)` wrapper that every
-  call must go through, plus tests that assert cross-tenant queries return nothing.
-- *Escape hatch:* if a tenant ever needs hard isolation, we can migrate that one org to its
-  own Workspace without changing the data model (`cc_*` already keys by org). Documented,
-  not built.
+Steven's bar was "super secure, no possibility of data bleed." Honest framing: the whole
+Foundry family uses **logical** isolation on shared infra (Workspace is a single D1 scoped by
+org). "No *possibility*" in the literal sense means physical per-tenant isolation, which the
+family did not adopt. We get to a very high bar with **defense-in-depth**:
+
+- **Agents are isolated by Twilio itself.** Each agent's browser gets a **per-worker Access
+  Token** that grants only *that worker's own* reservations/events. An agent **physically
+  cannot** see another org's — or even another agent's — tasks through their token. This is
+  Twilio-enforced, not filter-enforced.
+- **Server-side is the only logical surface.** Supervisor/admin queries run server-side and are
+  the one place org-scoping is by discipline. Every TaskRouter call goes through a single
+  mandatory `taskrouterScoped(orgId)` wrapper (deny-by-default), and **cross-tenant leak tests**
+  assert a query for org A returns nothing from org B.
+- **Realtime is isolated by construction** — the per-org Durable Object (§6.4) means one org's
+  live state/sockets never share an instance with another's.
+- *Why not one workspace per org:* heavyweight account objects; per-tenant multiplies webhook
+  wiring and account-limit risk. *Escape hatch (dedicated tier):* a specific tenant can be moved
+  to its own TaskRouter workspace later **without a data-model change** (`cc_*` already keys by org).
 - **SID lives in env** as `TWILIO_TASKROUTER_WORKSPACE_SID`.
 
 ### 6.2 Explicit "enable as agent" (recommend) — CLAUDE.md §11-Q3
 
-A Workspace user assigned to a Connect queue does **not** silently get a TaskRouter Worker.
+A Workspace user assigned to a Clarion queue does **not** silently get a TaskRouter Worker.
 An admin explicitly **enables** them as an agent, which (a) creates `cc_agents` + the Twilio
 Worker on demand and (b) makes the billing impact visible. This matches CLAUDE.md's own
 recommendation and Workspace's "make seats explicit" posture.
@@ -266,34 +304,37 @@ recommendation and Workspace's "make seats explicit" posture.
 ### 6.3 Access Tokens minted server-side
 
 The browser softphone needs a short-lived **Twilio Access Token** with a **Voice grant**
-(TwiML app SID) and a **TaskRouter Worker grant**. Connect mints these in a Pages Function
+(TwiML app SID) and a **TaskRouter Worker grant**. Clarion mints these in a Pages Function
 from `TWILIO_API_KEY_SID` / `TWILIO_API_KEY_SECRET` — **never** exposing the auth token to
 the client. Tokens are ~1h, refreshed by the SPA. (These two API-key vars are **not yet in
 `.env`** — see §10.)
 
-### 6.4 Realtime agent state: polling in v0.1, Durable Object in v0.2 — CLAUDE.md §11 / §7
+### 6.4 Realtime agent state: Durable Object from the start — DECIDED
 
-- **v0.1 (no DO commitment):** the Twilio Voice JS SDK already pushes call/reservation
-  events to the agent's own browser over Twilio's connection. Supervisor dashboards use
-  **short polling** of `GET /api/agents/state` (2–5 s). This ships the softphone without
-  committing the deployment to Durable Objects.
-- **v0.2 (recommend, needs your OK):** introduce **one Durable Object per org** as a
-  realtime hub. TaskRouter event webhooks → the org's DO → WebSocket fan-out to all
-  connected supervisor/agent browsers. This is the clean model for live wallboards and
-  presence. It changes the deployment shape (DO bindings), so per CLAUDE.md §7 it needs
-  explicit sign-off before we build it. **Flagged, not assumed.**
+**One Durable Object per org** is the realtime hub from day one (Steven's call). TaskRouter
+event webhooks → the org's DO (addressed by `idFromName(org_id)`) → WebSocket fan-out to that
+org's connected supervisor/agent browsers. The agent's own softphone events still come directly
+from the Twilio Voice JS SDK; the DO drives **presence, wallboards, and supervisor views**.
+
+- **Isolation benefit:** a DO instance is per-org by construction — one org's sockets and live
+  state never share an instance, so the realtime layer is isolated without a filter (reinforces §6.1).
+- **Deployment shape:** adds a `durable_objects` binding + a migration in `wrangler.jsonc`, and a
+  `ClarionRealtime` DO class. Introduced in the phase that first has live agents (§9 Phase 2), not
+  the auth-spine phases.
+- **Backpressure/limits:** one DO per org bounds fan-out to a single org's connection count;
+  reconnect with resume tokens; heartbeat to prune dead sockets.
 
 ### 6.5 Inbound flow (v0.1 target)
 
 ```
-PSTN call → Twilio Number → Studio Flow (IVR) or直接 → TwiML webhook on Connect
+PSTN call → Twilio Number → Studio Flow (IVR) or directly → TwiML webhook on Clarion
    → enqueue Task {organization_id, queue, required skills} into TaskRouter
    → Workflow matches an available Worker (agent) by skills/priority
    → Reservation → agent's browser softphone rings (Voice SDK)
    → agent accepts → media bridges → wrap-up → cc_calls + (optional) cc_recordings
 ```
 
-TwiML/status webhooks are Connect Pages Functions, **signature-validated** with the Twilio
+TwiML/status webhooks are Clarion Pages Functions, **signature-validated** with the Twilio
 auth token (reuse the pattern already in the `foundry` marketing worker).
 
 ### 6.6 Outbound: receive-only + click-to-call in v1 (recommend) — CLAUDE.md §11-Q6
@@ -315,20 +356,20 @@ testable without touching the account.
 
 ## 7. AuthPak & Workspace integration contract
 
-### 7.1 What Connect consumes from AuthPak (read-only, already exists)
+### 7.1 What Clarion consumes from AuthPak (read-only, already exists)
 - `GET /.well-known/jwks.json` — JWKS (cached by `@foundry/auth`).
 - The `fnd_session` cookie / JWT claims — identity + org + org-role.
 - `POST /api/token/refresh` — silent access-token refresh (called by SPA).
 - `GET /api/organizations/:id/members` — to list users who can be enabled as agents (§7.4).
 
-### 7.2 What Connect owns (not AuthPak's job)
-- Connect roles, agents, queues, all telephony state, recordings, call reporting.
+### 7.2 What Clarion owns (not AuthPak's job)
+- Clarion roles, agents, queues, all telephony state, recordings, call reporting.
 
-### 7.3 What Connect must **not** do (from CLAUDE.md §12)
+### 7.3 What Clarion must **not** do (from CLAUDE.md §12)
 - No login page, no user directory, no token minting for anything AuthPak covers, no
   commits in `authpak/` or `skills-foundry/`.
 
-### 7.4 Server-to-server AuthPak calls → request a `connect` service client
+### 7.4 Server-to-server AuthPak calls → request a `clarion` service client
 Listing org members (§7.1) via `GET /api/organizations/:id/members` is easy for
 **browser-driven** calls (the `fnd_session` cookie rides along on `.foundry-ns.com`). For
 **server-to-server** calls (e.g. a cron reconciliation with no user present), a mechanism
@@ -336,11 +377,11 @@ already exists: Workspace's `server/types.ts` carries `AUTHPAK_CLIENT_SECRET` �
 signing secret for AuthPak service calls (service client id: `foundry`)."* So AuthPak
 supports HMAC-signed service calls keyed by a **service client id**.
 
-**Action when we need it:** Connect should get its **own** service client id (e.g.
-`connect`) + secret rather than reuse Workspace's `foundry` credential. Since minting a new
+**Action when we need it:** Clarion should get its **own** service client id (e.g.
+`clarion`) + secret rather than reuse Workspace's `foundry` credential. Since minting a new
 service client is an AuthPak-side change, write
-`docs/change-requests/authpak-connect-service-client.md` and stop (per CLAUDE.md §3), then
-set `AUTHPAK_CLIENT_SECRET` in Connect's env. **For v0.1 we only need the browser-driven
+`docs/change-requests/authpak-clarion-service-client.md` and stop (per CLAUDE.md §3), then
+set `AUTHPAK_CLIENT_SECRET` in Clarion's env. **For v0.1 we only need the browser-driven
 member list, so this is deferred, not blocking.**
 
 ---
@@ -364,16 +405,16 @@ member list, so this is deferred, not blocking.**
 
 | Phase | Deliverable | Gated on |
 |---|---|---|
-| **0 — Bootstrap** | Vite React+TS+Tailwind app + Hono Pages Functions + `foundry-connect-db` D1 binding + `@foundry/auth` vendored + CI. `GET /api/health` → `{ ok: true }`. | — |
-| **1 — Auth spine** | `verifyFoundrySession` middleware; `cc_org_directory` + `cc_members` + Connect-role resolution/bootstrap; `GET /api/auth-status`; SPA gate (logged-out / no-access / in). | — |
-| **2 — Agents & skills** | Enable-as-agent flow (explicit), `cc_agents` + `cc_skills` + `cc_agent_skills`; **mints Twilio Access Tokens**; browser softphone registers (no live inbound yet). | Twilio API Key env (§10); **create TaskRouter Workspace** (your OK). |
-| **3 — Queues & inbound calls** | `cc_queues`/`cc_queue_members`, TaskRouter Workflows, inbound TwiML + status webhooks, reservation → softphone → wrap-up → `cc_calls`. | **Buy a number / create Workflow** (your OK). |
+| **0 — Bootstrap** | Vite React+TS+Tailwind app + Hono Pages Functions + `foundry-clarion-db` D1 binding + `@foundry/auth` vendored + CI. `GET /api/health` → `{ ok: true }`. | — |
+| **1 — Auth spine** | `verifyFoundrySession` middleware; `cc_org_directory` + `cc_members` + Clarion-role resolution/bootstrap; `GET /api/auth-status`; SPA gate (logged-out / no-access / in). | — |
+| **2 — Agents, skills & realtime spine** | `WORKSPACE_DB` read-only binding; enable-as-agent flow (pick a Workspace resource by email, snapshot skills into `cc_agent_skills`); `cc_agents`/`cc_skills`; **mints Twilio Access Tokens**; **per-org Durable Object (`ClarionRealtime`) stood up** for presence; browser softphone registers (no live inbound yet). | Twilio API Key env (§10); **create TaskRouter Workspace** (your OK). |
+| **3 — Queues & inbound calls** | `cc_queues`/`cc_queue_members`, TaskRouter Workflows, inbound TwiML + status webhooks → org's DO → live agent state; reservation → softphone → wrap-up → `cc_calls`. | **Buy a number / create Workflow** (your OK). |
 | **4 — Recording & reporting** | R2 recording capture + `cc_recordings`, transcripts, reporting views. | Recording-consent product decision (yours). |
-| **5 — Realtime & supervisor** | Durable Object realtime hub, live wallboard, monitor/whisper/barge, click-to-call outbound. | **Durable Object commitment** (your OK, §6.4). |
+| **5 — Supervisor & outbound** | Live wallboard on the DO stream, monitor/whisper/barge, click-to-call outbound. | — |
 
 Phases 0–1 are specified to executable, test-first detail in the companion plan. Phases 2+
-each get their own plan when we reach them, because they depend on decisions above
-(Twilio account mutation, DO commitment) that must be made with you in the loop.
+each get their own plan when we reach them, because they depend on the Twilio account-mutation
+points (create workspace, buy number) that must be confirmed with you in the loop.
 
 ---
 
@@ -382,17 +423,21 @@ each get their own plan when we reach them, because they depend on decisions abo
 Already present in `.env`: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
 `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`.
 
-**Add** (Connect-specific):
+Note: the read-only Workspace binding (`WORKSPACE_DB` → `skills-foundry-db`, id
+`2bdbcd5d-9559-434b-87b0-e2db99f8ce97`) and the Durable Object (`ClarionRealtime`) are
+declared in **`wrangler.jsonc`**, not `.env`.
+
+**Add** (Clarion-specific):
 ```
 # Cloudflare
-D1_DATABASE_ID=            # foundry-connect-db (created in Phase 0)
-R2_BUCKET_RECORDINGS=foundry-connect-recordings
+D1_DATABASE_ID=            # foundry-clarion-db (Clarion's OWN db, created in Phase 0)
+R2_BUCKET_RECORDINGS=foundry-clarion-recordings
 
 # AuthPak (per-request verification is via public JWKS — NO secret needed for that)
 AUTHPAK_BASE_URL=https://authpak.foundry-ns.com     # for login/refresh redirects only
 # (verifyFoundrySession defaults already target authpak.foundry-ns.com / aud "foundry-ns")
-AUTHPAK_CLIENT_SECRET=     # ONLY if/when Connect makes server-to-server AuthPak calls (§7.4);
-                          # requires a `connect` service client minted on AuthPak's side first
+AUTHPAK_CLIENT_SECRET=     # ONLY if/when Clarion makes server-to-server AuthPak calls (§7.4);
+                          # requires a `clarion` service client minted on AuthPak's side first
 
 # Twilio — needed from Phase 2
 TWILIO_API_KEY_SID=        # NOT YET PRESENT — needed to mint Access Tokens
@@ -401,7 +446,7 @@ TWILIO_TASKROUTER_WORKSPACE_SID=   # created in Phase 2 (your OK)
 TWILIO_TWIML_APP_SID=              # created in Phase 2 (your OK)
 
 # App
-APP_BASE_URL=https://connect.foundry-ns.com
+APP_BASE_URL=https://clarion.foundry-ns.com
 LOG_LEVEL=info
 ```
 **Removed from CLAUDE.md's list:** `AUTHPAK_SHARED_SECRET` (not used — JWKS is public),
@@ -411,14 +456,20 @@ LOG_LEVEL=info
 
 ---
 
-## 11. Open decisions carried forward (need your call)
+## 11. Decisions — status
 
-1. **🔴 Connect owns its own D1** (§2.1) — confirm (overrides CLAUDE.md "shared D1").
-2. **🔴 Shared TaskRouter Workspace, tenant-tagged** (§6.1) — confirm vs per-org.
-3. **🔴 Durable Objects for v0.2 realtime** (§6.4) — approve when we reach Phase 5.
-4. **v1 = inbound + click-to-call**, no predictive dialer (§6.6) — confirm scope.
-5. **Recording consent** defaults & jurisdiction rules (§8) — your product call.
-6. **Twilio account mutation** points (create Workspace, buy number, create Workflow/Flow)
-   — each needs an explicit in-session "go" (§6.7).
+**Locked 2026-07-13:**
+1. ✅ **Clarion owns its own D1** + read-only `WORKSPACE_DB` binding; agents = Workspace resources by email, skills snapshotted (§2.1, §4).
+2. ✅ **Stateless JWKS auth** via `@foundry/auth` (§2.2).
+3. ✅ **Clarion roles in `cc_members`** (§2.3).
+4. ✅ **Shared TaskRouter workspace, tenant-tagged**, logical + defense-in-depth isolation (§6.1).
+5. ✅ **Durable Object realtime from the start**, per-org hub (§6.4).
+6. ✅ **v1 = inbound + click-to-call**, no predictive dialer (§6.6).
 
-None of these block Phases 0–1, which is what the companion plan covers.
+**Still yours to decide (not blocking Phases 0–2):**
+- **Recording consent** defaults & jurisdiction rules (§8) — product/legal call.
+- **Twilio account-mutation** go-points (create workspace, buy number, create Workflow/Flow) — each needs an explicit in-session "go" (§6.7).
+- **Dedicated-isolation tier** — if/when a tenant demands physical isolation, move that org to its own TaskRouter workspace (no data-model change).
+- **`clarion` AuthPak service client** — only if server-to-server AuthPak calls are needed (§7.4).
+
+None block Phases 0–1 (companion plan) or Phase 2.

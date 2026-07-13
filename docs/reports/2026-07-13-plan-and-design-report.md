@@ -1,11 +1,20 @@
-# Foundry Connect — Plan & Design Report
+# Foundry Clarion — Plan & Design Report
 
-**Date:** 2026-07-13 · **Author:** Connect agent (autonomous session) · **Branch:** `feat/connect-plan-and-design`
+**Date:** 2026-07-13 · **Author:** Clarion agent (autonomous session) · **Branch:** `feat/clarion-plan-and-design`
 
 You asked me to create the plan and design using my own recommendations, and write up a
 report you can review later. This is that report. **Nothing has been built** — these are
 three documents (design, plan, this report) on a feature branch, not a line of product
 code. No Twilio or Cloudflare account state was changed.
+
+> **UPDATE — decisions locked later on 2026-07-13 (this report is the pre-decision review).**
+> Steven walked through the decisions and the app was **renamed Foundry Connect → Foundry Clarion**
+> (Amazon Connect conflict). Locked: ① own D1 + read-only Workspace binding, agents = Workspace
+> **resources linked by email** with skills snapshotted; ② stateless JWKS auth; ③ Clarion roles in
+> `cc_members`; ④ shared TaskRouter workspace, tenant-tagged, **logical + defense-in-depth**;
+> ⑤ **Durable Object realtime from the start** (this supersedes the "polling in v0.1" row below);
+> ⑥ v1 = inbound + click-to-call. Authoritative state now lives in `docs/design/foundry-clarion-design.md`
+> §2/§11 and the updated `CLAUDE.md`. The GitHub repo is now `sjohnston1972/foundry-clarion`.
 
 ---
 
@@ -16,8 +25,8 @@ code. No Twilio or Cloudflare account state was changed.
    vendored `@foundry/auth` package, `skills-foundry` (Workspace) server + all 45 migrations,
    and the `foundry` marketing site's Twilio worker — so the design is grounded in code that
    exists, not in guesses.
-3. Wrote **`docs/design/foundry-connect-design.md`** — the full architecture & design.
-4. Wrote **`docs/superpowers/plans/2026-07-13-foundry-connect-phase-0-1.md`** — a bite-sized,
+3. Wrote **`docs/design/foundry-clarion-design.md`** — the full architecture & design.
+4. Wrote **`docs/superpowers/plans/2026-07-13-foundry-clarion-phase-0-1.md`** — a bite-sized,
    test-first, executable plan for Phase 0 (bootstrap) + Phase 1 (auth spine).
 5. Wrote this report.
 
@@ -34,12 +43,12 @@ explicit sign-off** before any code is written.
   (`skills-foundry-db`) and — critically — **no `users` table at all**; it gets identity from
   the JWT and keeps a `org_directory` table it fills from JWT claims.
 - D1 databases are isolated; **you can't FK from one into another.** There is no shared DB
-  for Connect to read users from.
-- **My recommendation:** Connect owns its **own** D1 (`foundry-connect-db`), mirrors the
+  for Clarion to read users from.
+- **My recommendation:** Clarion owns its **own** D1 (`foundry-clarion-db`), mirrors the
   `org_directory` pattern, scopes everything by `organization_id` (TEXT, the AuthPak org id),
   and stores `user_id` (JWT `sub`, TEXT) as a logical reference. This is how AuthPak and
   Workspace already work, and it's the only option that functions given D1 isolation.
-- **Decision needed:** confirm Connect gets its own D1 (this overrides the CLAUDE.md "shared
+- **Decision needed:** confirm Clarion gets its own D1 (this overrides the CLAUDE.md "shared
   D1" locked row). If you genuinely want one physical shared D1, that's a bigger cross-repo
   change and I'd spec it rather than assume it.
 
@@ -53,13 +62,13 @@ explicit sign-off** before any code is written.
 - This is lower-risk to accept — it's just "use the package the family already ships" — but it
   changes §5 and §9 of CLAUDE.md, so I'm flagging it.
 
-### 🟢 3. Connect's own roles must live in Connect (this *resolves* an open question)
+### 🟢 3. Clarion's own roles must live in Clarion (this *resolves* an open question)
 - The JWT only carries the org role (`owner`/`admin`/`member`), never
-  `connect:admin`/`supervisor`/`agent`. AuthPak's SPEC is explicit that per-app entitlements
+  `clarion:admin`/`supervisor`/`agent`. AuthPak's SPEC is explicit that per-app entitlements
   belong to the consuming app.
-- So Connect roles live in a Connect table (`cc_members`). This closes **CLAUDE.md open
+- So Clarion roles live in a Clarion table (`cc_members`). This closes **CLAUDE.md open
   question §11 Q1** — no discussion with the AuthPak agent needed. My design bootstraps any org
-  `owner`/`admin` as a Connect `admin` on first visit so an org can always administer Connect.
+  `owner`/`admin` as a Clarion `admin` on first visit so an org can always administer Clarion.
 
 ---
 
@@ -72,7 +81,7 @@ none block Phases 0–1.
 |---|---|---|
 | TaskRouter: one Workspace per org vs shared? | **One shared Workspace, tenant-tagged** with an `organization_id` attribute on every Worker/Workflow/Task. | Per-org Workspaces are heavyweight and multiply ops/limits for no real isolation gain at this scale. Isolation becomes a disciplined filter (+ tests). Escape hatch: migrate a single tenant to its own Workspace later if ever needed. |
 | Auto-create TaskRouter Worker on queue assignment? | **No — explicit "enable as agent"** step. | Makes billing visible; matches CLAUDE.md's own lean. |
-| Realtime agent state: Durable Object vs polling? | **Polling in v0.1, Durable Object in v0.2.** | Ships the softphone without committing the deployment shape to DOs. DO hub (per-org, TaskRouter webhooks → WebSocket) is the right v0.2 model — but per CLAUDE.md §7 it needs your OK, so it's flagged not assumed. |
+| Realtime agent state: Durable Object vs polling? | ~~Polling in v0.1, DO in v0.2~~ → **DECIDED: Durable Object from the start** (per-org hub). | Steven chose DO from day one; a per-org DO also isolates realtime state by construction, reinforcing the no-bleed requirement. |
 | Outbound scope for v1? | **Inbound + click-to-call; no predictive dialer.** | Click-to-call is nearly free once the inbound softphone works; a real dialer is a separate build. |
 | Recording consent? | Code exposes a per-org toggle + per-number announcement; **defaults/jurisdiction are your product call.** | It's a legal/product decision, not a code one (your call per CLAUDE.md). |
 
@@ -89,7 +98,7 @@ none block Phases 0–1.
   mutating call is testable without touching the account.
 - **Server-to-server AuthPak calls** (if we ever need them, e.g. cron member-list reconcile):
   AuthPak already supports HMAC service calls keyed by a service client id (Workspace uses
-  `foundry`). Connect should get its **own** `connect` service client — that's an AuthPak-side
+  `foundry`). Clarion should get its **own** `clarion` service client — that's an AuthPak-side
   change, so it'd be a change-request, not something I invent. Deferred; v0.1's browser-driven
   member list doesn't need it.
 
@@ -97,9 +106,9 @@ none block Phases 0–1.
 
 ## What Phase 0–1 delivers (the executable plan)
 
-Nine test-first tasks taking Connect from empty repo to a working, tested identity spine:
+Nine test-first tasks taking Clarion from empty repo to a working, tested identity spine:
 scaffold → own D1 → health check → base tables (`cc_org_directory`, `cc_members`,
-`cc_audit_log`) → typed accessors → Connect-role resolution with owner→admin bootstrap →
+`cc_audit_log`) → typed accessors → Clarion-role resolution with owner→admin bootstrap →
 AuthPak session gate + `/api/auth-status` + `/api/me` → minimal SPA gate (signed-out /
 no-access / app) → end-to-end local verification. Every task is red-test → implement →
 green-test → commit. No Twilio, no account mutations — safe to execute whenever you approve
@@ -122,8 +131,8 @@ the design.
 
 ---
 
-## Files produced (on `feat/connect-plan-and-design`, uncommitted)
+## Files produced (on `feat/clarion-plan-and-design`, uncommitted)
 
-- `docs/design/foundry-connect-design.md`
-- `docs/superpowers/plans/2026-07-13-foundry-connect-phase-0-1.md`
+- `docs/design/foundry-clarion-design.md`
+- `docs/superpowers/plans/2026-07-13-foundry-clarion-phase-0-1.md`
 - `docs/reports/2026-07-13-plan-and-design-report.md` (this file)

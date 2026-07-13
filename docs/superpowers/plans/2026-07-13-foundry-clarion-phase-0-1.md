@@ -1,10 +1,10 @@
-# Foundry Connect — Phase 0–1 Implementation Plan (Bootstrap + Auth Spine)
+# Foundry Clarion — Phase 0–1 Implementation Plan (Bootstrap + Auth Spine)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the Foundry Connect Cloudflare app (Pages + Hono Pages Functions + own D1) with a working health check, then wire AuthPak session verification, the Connect-role model, and the SPA auth gate — so every later phase has a tested identity + tenancy spine.
+**Goal:** Stand up the Foundry Clarion Cloudflare app (Pages + Hono Pages Functions + own D1) with a working health check, then wire AuthPak session verification, the Clarion-role model, and the SPA auth gate — so every later phase has a tested identity + tenancy spine.
 
-**Architecture:** Mirror Skills Foundry (Workspace) and AuthPak exactly: React 19 + Vite + Tailwind v4 SPA served by Cloudflare Pages; a single Pages Function `functions/api/[[route]].ts` mounts a Hono app in `server/`; Cloudflare **D1** (`foundry-connect-db`, Connect-owned) for data; identity comes only from the AuthPak `fnd_session` JWT, verified statelessly via JWKS with the vendored `@foundry/auth`. Connect owns its roles in `cc_members`, keyed by AuthPak `organization_id` + `user_id` (TEXT, no cross-DB FK).
+**Architecture:** Mirror Skills Foundry (Workspace) and AuthPak exactly: React 19 + Vite + Tailwind v4 SPA served by Cloudflare Pages; a single Pages Function `functions/api/[[route]].ts` mounts a Hono app in `server/`; Cloudflare **D1** (`foundry-clarion-db`, Clarion-owned) for data; identity comes only from the AuthPak `fnd_session` JWT, verified statelessly via JWKS with the vendored `@foundry/auth`. Clarion owns its roles in `cc_members`, keyed by AuthPak `organization_id` + `user_id` (TEXT, no cross-DB FK).
 
 **Tech Stack:** TypeScript, Hono (`hono/cloudflare-pages`), `@foundry/auth` (vendored tarball), React 19, Vite 8, Tailwind v4, `react-router-dom` v7, Vitest, oxlint, wrangler, Cloudflare D1.
 
@@ -12,7 +12,7 @@
 
 - **Package manager:** npm. Node 20+.
 - **Never** commit `.env` or `.dev.vars`. Confirm `.gitignore` covers both before the first commit.
-- **Feature branch only:** `feat/connect-plan-and-design` (already checked out) or a `feat/connect-phase-0-1` branch. Never push to `main`.
+- **Feature branch only:** `feat/clarion-plan-and-design` (already checked out) or a `feat/clarion-phase-0-1` branch. Never push to `main`.
 - **No cross-repo commits** in `authpak/` or `skills-foundry/`.
 - **No `any`.** Error responses are JSON `{ error: { code, message } }`; success envelopes are `{ success: true, data }` to match Workspace.
 - **Route handler order:** input validation → auth check → business logic → response.
@@ -27,7 +27,7 @@
 ## File Structure
 
 ```
-foundry-connect/
+foundry-clarion/
   package.json                       # npm scripts, deps (mirror Workspace)
   wrangler.jsonc                     # Pages project + D1 binding
   tsconfig.json / tsconfig.server.json
@@ -44,11 +44,11 @@ foundry-connect/
     types.ts                         # Env = { Bindings, Variables }
     lib/
       http.ts                        # json helpers, error envelope, apiOnError
-      auth.ts                        # role resolution + guards (requireConnectRole)
+      auth.ts                        # role resolution + guards (requireClarionRole)
       directory.ts                   # touchOrgDirectory()
     routes/
       health.ts
-      me.ts                          # GET /api/me  (current identity + connect role)
+      me.ts                          # GET /api/me  (current identity + clarion role)
     db/
       directory.ts                   # cc_org_directory accessor
       members.ts                     # cc_members accessor
@@ -94,7 +94,7 @@ dist
 
 ```json
 {
-  "name": "foundry-connect",
+  "name": "foundry-clarion",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -107,8 +107,8 @@ dist
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
     "pages:dev": "wrangler pages dev",
     "pages:deploy": "npm run build && wrangler pages deploy",
-    "d1:migrate:local": "wrangler d1 migrations apply foundry-connect-db --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply foundry-connect-db --remote"
+    "d1:migrate:local": "wrangler d1 migrations apply foundry-clarion-db --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply foundry-clarion-db --remote"
   },
   "dependencies": {
     "@foundry/auth": "file:vendor/foundry-auth-0.1.0.tgz",
@@ -139,7 +139,7 @@ dist
 
 ```jsonc
 {
-  "name": "foundry-connect",
+  "name": "foundry-clarion",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "dist",
@@ -147,7 +147,7 @@ dist
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "foundry-connect-db",
+      "database_name": "foundry-clarion-db",
       "database_id": "REPLACE_AFTER_TASK_2",
       "migrations_dir": "migrations"
     }
@@ -171,20 +171,20 @@ Expected: installs clean; `@foundry/auth` resolves from `vendor/`.
 
 ```bash
 git add package.json package-lock.json .gitignore wrangler.jsonc tsconfig*.json vite.config.ts vitest.config.ts vendor/
-git commit -m "chore: bootstrap foundry-connect scaffold (Pages + Hono + D1 + @foundry/auth)"
+git commit -m "chore: bootstrap foundry-clarion scaffold (Pages + Hono + D1 + @foundry/auth)"
 ```
 
 ---
 
-### Task 2: Create the Connect D1 database
+### Task 2: Create the Clarion D1 database
 
 **Files:** Modify `wrangler.jsonc:database_id`
 
-**Interfaces:** Produces the `foundry-connect-db` D1 database and its id.
+**Interfaces:** Produces the `foundry-clarion-db` D1 database and its id.
 
 - [ ] **Step 1: Create the database**
 
-Run: `wrangler d1 create foundry-connect-db`
+Run: `wrangler d1 create foundry-clarion-db`
 Expected: prints a `database_id` UUID. (This is a Cloudflare account change but **not** a Twilio/billing mutation — it is free and expected for Phase 0. If you want zero account changes until sign-off, stop here and confirm with Steven.)
 
 - [ ] **Step 2: Paste the id into `wrangler.jsonc`** replacing `REPLACE_AFTER_TASK_2`.
@@ -195,7 +195,7 @@ Expected: prints a `database_id` UUID. (This is a Cloudflare account change but 
 
 ```bash
 git add wrangler.jsonc
-git commit -m "chore: bind foundry-connect-db D1 database"
+git commit -m "chore: bind foundry-clarion-db D1 database"
 ```
 
 ---
@@ -244,16 +244,16 @@ export type Bindings = {
   DB: D1Database
   /** When 'true', a valid AuthPak session is REQUIRED (set at cutover). */
   AUTH_ENFORCE?: string
-  /** Comma-separated emails granted a cross-tenant Connect site-admin view. */
+  /** Comma-separated emails granted a cross-tenant Clarion site-admin view. */
   ADMIN_EMAILS?: string
   APP_BASE_URL?: string
 }
 
 /** AuthPak identity is present only on authenticated requests. `organizationId`
- *  is resolved by the auth middleware; `connectRole` is Connect's own role. */
+ *  is resolved by the auth middleware; `clarionRole` is Clarion's own role. */
 export type Variables = Partial<FoundryAuthVariables> & {
   organizationId: string | null
-  connectRole: 'admin' | 'supervisor' | 'agent' | null
+  clarionRole: 'admin' | 'supervisor' | 'agent' | null
 }
 
 export type Env = { Bindings: Bindings; Variables: Variables }
@@ -336,7 +336,7 @@ git commit -m "feat: health route + Pages Function entry (Phase 0 green)"
 
 ---
 
-### Task 4: First migration — Connect-owned tables
+### Task 4: First migration — Clarion-owned tables
 
 **Files:** Create `migrations/0001_init.sql`; Test `test/migration.test.ts`
 
@@ -355,7 +355,7 @@ describe('0001_init migration', () => {
     for (const t of ['cc_org_directory', 'cc_members', 'cc_audit_log']) {
       expect(sql).toContain(`CREATE TABLE ${t}`)
     }
-    expect(sql).toContain("connect_role") // role column present
+    expect(sql).toContain("clarion_role") // role column present
   })
 })
 ```
@@ -368,7 +368,7 @@ Expected: FAIL — file not found.
 - [ ] **Step 3: Write `migrations/0001_init.sql`**
 
 ```sql
--- 0001_init.sql — Foundry Connect base tables.
+-- 0001_init.sql — Foundry Clarion base tables.
 -- organization_id / user_id are AuthPak ids (TEXT). No cross-database FKs.
 PRAGMA foreign_keys = ON;
 
@@ -383,11 +383,11 @@ CREATE TABLE cc_org_directory (
   last_seen   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Connect's own per-user roles (AuthPak's JWT does NOT carry these).
+-- Clarion's own per-user roles (AuthPak's JWT does NOT carry these).
 CREATE TABLE cc_members (
   organization_id TEXT NOT NULL,
   user_id         TEXT NOT NULL,
-  connect_role    TEXT NOT NULL CHECK (connect_role IN ('admin','supervisor','agent')),
+  clarion_role    TEXT NOT NULL CHECK (clarion_role IN ('admin','supervisor','agent')),
   created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (organization_id, user_id)
 );
@@ -433,28 +433,28 @@ git commit -m "feat: 0001_init — cc_org_directory, cc_members, cc_audit_log"
 **Interfaces:**
 - Produces:
   - `touchOrgDirectory(db, { organization_id, name?, slug?, owner_email? }): Promise<{ disabled: boolean }>` — upsert last_seen/name/owner_email, return disabled flag.
-  - `getConnectRole(db, orgId, userId): Promise<'admin'|'supervisor'|'agent'|null>`
-  - `setConnectRole(db, orgId, userId, role): Promise<void>`
+  - `getClarionRole(db, orgId, userId): Promise<'admin'|'supervisor'|'agent'|null>`
+  - `setClarionRole(db, orgId, userId, role): Promise<void>`
 
 - [ ] **Step 1: Write the failing test** (fake D1 that records bind/first calls)
 
 ```ts
 // test/db.test.ts
 import { describe, it, expect } from 'vitest'
-import { getConnectRole } from '../server/db/members'
+import { getClarionRole } from '../server/db/members'
 
 function fakeDb(row: unknown) {
   return { prepare: () => ({ bind: () => ({ first: async () => row }) }) } as unknown as D1Database
 }
 
-describe('getConnectRole', () => {
+describe('getClarionRole', () => {
   it('returns the role when a row exists', async () => {
-    const db = fakeDb({ connect_role: 'supervisor' })
-    expect(await getConnectRole(db, 'org_1', 'user_1')).toBe('supervisor')
+    const db = fakeDb({ clarion_role: 'supervisor' })
+    expect(await getClarionRole(db, 'org_1', 'user_1')).toBe('supervisor')
   })
   it('returns null when no row exists', async () => {
     const db = fakeDb(null)
-    expect(await getConnectRole(db, 'org_1', 'user_1')).toBeNull()
+    expect(await getClarionRole(db, 'org_1', 'user_1')).toBeNull()
   })
 })
 ```
@@ -467,21 +467,21 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Write `server/db/members.ts`**
 
 ```ts
-export type ConnectRole = 'admin' | 'supervisor' | 'agent'
+export type ClarionRole = 'admin' | 'supervisor' | 'agent'
 
-export async function getConnectRole(db: D1Database, orgId: string, userId: string): Promise<ConnectRole | null> {
+export async function getClarionRole(db: D1Database, orgId: string, userId: string): Promise<ClarionRole | null> {
   const row = await db
-    .prepare('SELECT connect_role FROM cc_members WHERE organization_id = ? AND user_id = ?')
+    .prepare('SELECT clarion_role FROM cc_members WHERE organization_id = ? AND user_id = ?')
     .bind(orgId, userId)
-    .first<{ connect_role: ConnectRole }>()
-  return row?.connect_role ?? null
+    .first<{ clarion_role: ClarionRole }>()
+  return row?.clarion_role ?? null
 }
 
-export async function setConnectRole(db: D1Database, orgId: string, userId: string, role: ConnectRole): Promise<void> {
+export async function setClarionRole(db: D1Database, orgId: string, userId: string, role: ClarionRole): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO cc_members (organization_id, user_id, connect_role) VALUES (?, ?, ?)
-       ON CONFLICT(organization_id, user_id) DO UPDATE SET connect_role = excluded.connect_role`,
+      `INSERT INTO cc_members (organization_id, user_id, clarion_role) VALUES (?, ?, ?)
+       ON CONFLICT(organization_id, user_id) DO UPDATE SET clarion_role = excluded.clarion_role`,
     )
     .bind(orgId, userId, role)
     .run()
@@ -534,17 +534,17 @@ git commit -m "feat: typed accessors for cc_org_directory + cc_members"
 **Files:** Create `server/lib/auth.ts`; Test `test/auth.test.ts`
 
 **Interfaces:**
-- Consumes: `getConnectRole`, `setConnectRole` (Task 5); `FoundryClaims` from `@foundry/auth`.
+- Consumes: `getClarionRole`, `setClarionRole` (Task 5); `FoundryClaims` from `@foundry/auth`.
 - Produces:
-  - `resolveConnectRole(db, claims): Promise<ConnectRole | null>` — returns the row's role; if none exists and the org-role is `owner`/`admin`, **bootstrap** the caller as `admin` and return `admin`.
-  - `requireConnectRole(min: ConnectRole)` — a Hono middleware that 403s `connect_no_access` / `connect_forbidden`.
+  - `resolveClarionRole(db, claims): Promise<ClarionRole | null>` — returns the row's role; if none exists and the org-role is `owner`/`admin`, **bootstrap** the caller as `admin` and return `admin`.
+  - `requireClarionRole(min: ClarionRole)` — a Hono middleware that 403s `clarion_no_access` / `clarion_forbidden`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
 // test/auth.test.ts
 import { describe, it, expect } from 'vitest'
-import { resolveConnectRole } from '../server/lib/auth'
+import { resolveClarionRole } from '../server/lib/auth'
 
 function db(existingRole: string | null) {
   const calls: string[] = []
@@ -553,7 +553,7 @@ function db(existingRole: string | null) {
       calls.push(sql)
       return {
         bind: () => ({
-          first: async () => (sql.startsWith('SELECT') ? (existingRole ? { connect_role: existingRole } : null) : null),
+          first: async () => (sql.startsWith('SELECT') ? (existingRole ? { clarion_role: existingRole } : null) : null),
           run: async () => ({}),
         }),
       }
@@ -562,21 +562,21 @@ function db(existingRole: string | null) {
   return { d, calls }
 }
 
-describe('resolveConnectRole', () => {
+describe('resolveClarionRole', () => {
   it('returns the stored role', async () => {
     const { d } = db('supervisor')
-    const role = await resolveConnectRole(d, { sub: 'u1', org_id: 'o1', role: 'member' } as never)
+    const role = await resolveClarionRole(d, { sub: 'u1', org_id: 'o1', role: 'member' } as never)
     expect(role).toBe('supervisor')
   })
   it('bootstraps an org owner with no row to admin', async () => {
     const { d, calls } = db(null)
-    const role = await resolveConnectRole(d, { sub: 'u1', org_id: 'o1', role: 'owner' } as never)
+    const role = await resolveClarionRole(d, { sub: 'u1', org_id: 'o1', role: 'owner' } as never)
     expect(role).toBe('admin')
     expect(calls.some((s) => s.startsWith('INSERT'))).toBe(true)
   })
   it('returns null for a plain member with no row', async () => {
     const { d } = db(null)
-    const role = await resolveConnectRole(d, { sub: 'u1', org_id: 'o1', role: 'member' } as never)
+    const role = await resolveClarionRole(d, { sub: 'u1', org_id: 'o1', role: 'member' } as never)
     expect(role).toBeNull()
   })
 })
@@ -593,29 +593,29 @@ Expected: FAIL — module not found.
 import type { MiddlewareHandler } from 'hono'
 import type { FoundryClaims } from '@foundry/auth'
 import type { Env } from '../types'
-import { getConnectRole, setConnectRole, type ConnectRole } from '../db/members'
+import { getClarionRole, setClarionRole, type ClarionRole } from '../db/members'
 import { err } from './http'
 
-const RANK: Record<ConnectRole, number> = { agent: 1, supervisor: 2, admin: 3 }
+const RANK: Record<ClarionRole, number> = { agent: 1, supervisor: 2, admin: 3 }
 
-export async function resolveConnectRole(db: D1Database, claims: FoundryClaims): Promise<ConnectRole | null> {
+export async function resolveClarionRole(db: D1Database, claims: FoundryClaims): Promise<ClarionRole | null> {
   const orgId = claims.org_id
   if (!orgId) return null
-  const existing = await getConnectRole(db, orgId, claims.sub)
+  const existing = await getClarionRole(db, orgId, claims.sub)
   if (existing) return existing
-  // Bootstrap: an AuthPak org owner/admin can always administer Connect.
+  // Bootstrap: an AuthPak org owner/admin can always administer Clarion.
   if (claims.role === 'owner' || claims.role === 'admin') {
-    await setConnectRole(db, orgId, claims.sub, 'admin')
+    await setClarionRole(db, orgId, claims.sub, 'admin')
     return 'admin'
   }
   return null
 }
 
-export function requireConnectRole(min: ConnectRole): MiddlewareHandler<Env> {
+export function requireClarionRole(min: ClarionRole): MiddlewareHandler<Env> {
   return async (c, next) => {
-    const role = c.get('connectRole')
-    if (!role) return err(c, 'connect_no_access', 'No Connect access for this user', 403)
-    if (RANK[role] < RANK[min]) return err(c, 'connect_forbidden', `Requires ${min}`, 403)
+    const role = c.get('clarionRole')
+    if (!role) return err(c, 'clarion_no_access', 'No Clarion access for this user', 403)
+    if (RANK[role] < RANK[min]) return err(c, 'clarion_forbidden', `Requires ${min}`, 403)
     await next()
   }
 }
@@ -630,7 +630,7 @@ Expected: PASS (all three cases).
 
 ```bash
 git add server/lib/auth.ts test/auth.test.ts
-git commit -m "feat: Connect role resolution + requireConnectRole guard (owner->admin bootstrap)"
+git commit -m "feat: Clarion role resolution + requireClarionRole guard (owner->admin bootstrap)"
 ```
 
 ---
@@ -640,11 +640,11 @@ git commit -m "feat: Connect role resolution + requireConnectRole guard (owner->
 **Files:** Modify `server/app.ts`; Create `server/routes/me.ts`; Test `test/app-auth.test.ts`
 
 **Interfaces:**
-- Consumes: `verifyFoundrySession` (`@foundry/auth`), `touchOrgDirectory`, `resolveConnectRole`, `requireConnectRole`.
+- Consumes: `verifyFoundrySession` (`@foundry/auth`), `touchOrgDirectory`, `resolveClarionRole`, `requireClarionRole`.
 - Produces:
-  - Public `GET /api/auth-status` → `{ success, data: { authenticated, hasOrg, email, orgId, orgSlug, orgRole, connectRole, disabled } }`.
-  - Enforce middleware on `/api/*` (after health/auth-status) that sets `user`, `organizationId`, `connectRole`, touches the directory, and — when `AUTH_ENFORCE==='true'` — 401s unauthenticated XHR / 302s navigations to AuthPak login.
-  - `GET /api/me` (behind the gate) → the caller's identity + connect role.
+  - Public `GET /api/auth-status` → `{ success, data: { authenticated, hasOrg, email, orgId, orgSlug, orgRole, clarionRole, disabled } }`.
+  - Enforce middleware on `/api/*` (after health/auth-status) that sets `user`, `organizationId`, `clarionRole`, touches the directory, and — when `AUTH_ENFORCE==='true'` — 401s unauthenticated XHR / 302s navigations to AuthPak login.
+  - `GET /api/me` (behind the gate) → the caller's identity + clarion role.
 
 - [ ] **Step 1: Write the failing test** (inject a fake `verifyFoundrySession` via the app's DI seam — see Step 3 note)
 
@@ -671,7 +671,7 @@ function fakeDb() {
         bind: (...a: unknown[]) => ({
           async first() {
             if (sql.includes('FROM cc_org_directory')) return { disabled: 0 }
-            if (sql.includes('FROM cc_members')) return store['role'] ? { connect_role: store['role'] } : null
+            if (sql.includes('FROM cc_members')) return store['role'] ? { clarion_role: store['role'] } : null
             return { ok: 1 }
           },
           async run() { if (sql.startsWith('INSERT INTO cc_members')) store['role'] = String(a[2]); return {} },
@@ -698,7 +698,7 @@ describe('auth gate', () => {
     const res = await createApp().request('/api/me', { headers: { cookie: 'fnd_session=good' } }, env)
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.data).toMatchObject({ user: { id: 'u1', email: 'a@b.com' }, orgId: 'o1', connectRole: 'admin' })
+    expect(body.data).toMatchObject({ user: { id: 'u1', email: 'a@b.com' }, orgId: 'o1', clarionRole: 'admin' })
   })
 })
 ```
@@ -720,7 +720,7 @@ import { apiOnError, err } from './lib/http'
 import { health } from './routes/health'
 import { me } from './routes/me'
 import { touchOrgDirectory } from './db/directory'
-import { resolveConnectRole } from './lib/auth'
+import { resolveClarionRole } from './lib/auth'
 
 const AUTHPAK_LOGIN = 'https://authpak.foundry-ns.com/login'
 
@@ -742,11 +742,11 @@ export function createApp() {
       })
       disabled = d.disabled
     }
-    const connectRole = claims ? await resolveConnectRole(c.env.DB, claims) : null
+    const clarionRole = claims ? await resolveClarionRole(c.env.DB, claims) : null
     return c.json({ success: true, data: {
       authenticated: !!claims, hasOrg: !!claims?.org_id, email: claims?.email ?? null,
       orgId: claims?.org_id ?? null, orgSlug: claims?.org_slug ?? null,
-      orgRole: claims?.role ?? null, connectRole, disabled,
+      orgRole: claims?.role ?? null, clarionRole, disabled,
     } })
   })
 
@@ -759,7 +759,7 @@ export function createApp() {
         if (wantsHtml) return c.redirect(`${AUTHPAK_LOGIN}?redirect_uri=${encodeURIComponent(c.req.url)}`)
         return err(c, 'unauthenticated', 'Sign in required', 401)
       }
-      c.set('organizationId', null); c.set('connectRole', null)
+      c.set('organizationId', null); c.set('clarionRole', null)
       return next()
     }
     const dir = claims.org_id ? await touchOrgDirectory(c.env.DB, {
@@ -769,7 +769,7 @@ export function createApp() {
     if (dir.disabled) return err(c, 'org_disabled', 'This organization is suspended', 403)
     c.set('user', { id: claims.sub, email: claims.email, emailVerified: !!claims.email_verified, name: claims.name })
     c.set('organizationId', claims.org_id ?? null)
-    c.set('connectRole', await resolveConnectRole(c.env.DB, claims))
+    c.set('clarionRole', await resolveClarionRole(c.env.DB, claims))
     await next()
   })
 
@@ -791,7 +791,7 @@ me.get('/', (c) => {
   const user = c.get('user')
   if (!user) return err(c, 'unauthenticated', 'Sign in required', 401)
   return c.json({ success: true, data: {
-    user, orgId: c.get('organizationId'), orgRole: c.get('role') ?? null, connectRole: c.get('connectRole'),
+    user, orgId: c.get('organizationId'), orgRole: c.get('role') ?? null, clarionRole: c.get('clarionRole'),
   } })
 })
 ```
@@ -821,7 +821,7 @@ git commit -m "feat: AuthPak session gate + /api/auth-status + /api/me (Phase 1 
 
 **Interfaces:**
 - Consumes: `GET /api/auth-status`.
-- Produces: `fetchAuthStatus(): Promise<AuthStatus>`; an `<App/>` that renders one of: **SignedOut** (link to AuthPak login), **NoAccess** (request-Connect-access screen), **AppShell** (placeholder) based on `authenticated`/`connectRole`.
+- Produces: `fetchAuthStatus(): Promise<AuthStatus>`; an `<App/>` that renders one of: **SignedOut** (link to AuthPak login), **NoAccess** (request-Clarion-access screen), **AppShell** (placeholder) based on `authenticated`/`clarionRole`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -834,11 +834,11 @@ describe('classifyGate', () => {
   it('signed-out -> "signed-out"', () => {
     expect(classifyGate({ authenticated: false } as never)).toBe('signed-out')
   })
-  it('authed but no connect role -> "no-access"', () => {
-    expect(classifyGate({ authenticated: true, hasOrg: true, connectRole: null } as never)).toBe('no-access')
+  it('authed but no clarion role -> "no-access"', () => {
+    expect(classifyGate({ authenticated: true, hasOrg: true, clarionRole: null } as never)).toBe('no-access')
   })
   it('authed agent -> "app"', () => {
-    expect(classifyGate({ authenticated: true, hasOrg: true, connectRole: 'agent' } as never)).toBe('app')
+    expect(classifyGate({ authenticated: true, hasOrg: true, clarionRole: 'agent' } as never)).toBe('app')
   })
 })
 ```
@@ -857,7 +857,7 @@ export type AuthStatus = {
   email?: string | null
   orgSlug?: string | null
   orgRole?: string | null
-  connectRole?: 'admin' | 'supervisor' | 'agent' | null
+  clarionRole?: 'admin' | 'supervisor' | 'agent' | null
   disabled?: boolean
 }
 
@@ -865,7 +865,7 @@ export type Gate = 'signed-out' | 'no-access' | 'app'
 
 export function classifyGate(s: AuthStatus): Gate {
   if (!s.authenticated) return 'signed-out'
-  if (!s.connectRole) return 'no-access'
+  if (!s.clarionRole) return 'no-access'
   return 'app'
 }
 
@@ -939,7 +939,7 @@ Expected: `{"success":true,"data":{"authenticated":false,...}}`.
 
 **Placeholder scan:** Task 8 Step 5 and Task 9 Steps 5–6 intentionally describe UI/verification rather than showing every line — these are the two genuinely UI/human-in-the-loop steps; all server logic steps carry full code. No `TODO`/`add error handling` placeholders in code steps.
 
-**Type consistency:** `ConnectRole` is defined once (Task 5, `server/db/members.ts`) and imported everywhere. `resolveConnectRole(db, claims)` / `requireConnectRole(min)` / `touchOrgDirectory(db, o)` / `getConnectRole(db, orgId, userId)` signatures are consistent across Tasks 5–8. The `Variables.connectRole` type matches `ConnectRole | null`. ✅
+**Type consistency:** `ClarionRole` is defined once (Task 5, `server/db/members.ts`) and imported everywhere. `resolveClarionRole(db, claims)` / `requireClarionRole(min)` / `touchOrgDirectory(db, o)` / `getClarionRole(db, orgId, userId)` signatures are consistent across Tasks 5–8. The `Variables.clarionRole` type matches `ClarionRole | null`. ✅
 
 ---
 
