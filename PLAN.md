@@ -80,6 +80,7 @@ branch only (never `main`); never write to Workspace's DB. Cookie/JWT contract i
     **Verify:** full local gate green — `npm run d1:migrate:local && npx vitest run &&
     npm run build && npm run lint` all exit 0.
     **Commit:** `docs: Phase 0–1 complete (auth spine, local-verified)`.
+    **Then:** create empty file DONE at repo root and stop.
 
 ---
 
