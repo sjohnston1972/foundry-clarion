@@ -24,6 +24,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T21:26Z — Step 1 done: 0002_agents.sql (cc_agents, cc_skills, cc_agent_skills) + test. vitest RED→GREEN PASS; d1:migrate:local applied (7 cmds). Review: spec ✅, 2 Minor plan-mandated. commit 638d8bc
 
+- 2026-07-14T21:31Z — Step 2 done: WORKSPACE_DB read-only bind + server/db/workspace.ts accessors + Twilio/DO env in types.ts/wrangler.jsonc/.dev.vars. vitest 4/4 (19/19 full) PASS; typecheck:server clean. Review: spec ✅, 2 Minor. commit cb9591d
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
