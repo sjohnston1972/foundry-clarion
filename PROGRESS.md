@@ -32,6 +32,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T21:52Z — Step 5 done: server/routes/agents.ts (enable/list/candidates/status) mounted after enforce gate; server/db/audit.ts extracted. vitest 28/28 (new agents-route 3/3) PASS; typecheck clean. Review: 2 Important plan-mandated → 1 fixed (audit accessor), 1 accepted (middleware-first role gate, confirm w/ Steven). commits da8adf1+ddd1e7c
 
+- 2026-07-14T21:56Z — Step 6 done: jose dep + server/lib/twilio/token.ts (mintVoiceToken, HS256 Twilio Access Token, Voice+TaskRouter grants) + POST /api/token/voice (503/403/409 branches). vitest 30/30 PASS; typecheck clean. Review: spec ✅, zero findings. commit 5c7aa3a
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
