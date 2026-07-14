@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+/* ── Foundry Clarion design tokens ──────────────────────────────────────────
+   Mirrors Workspace's cool-neutral canvas + slate ink + single accent. The
+   Phase 0–1 shell only needs the gate screens, so this is the minimal token
+   set; expand as the agent console lands in later phases. Light only. */
+
+@theme {
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-line: #e6e8ec;
+  --color-accent: #00a3ff;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
