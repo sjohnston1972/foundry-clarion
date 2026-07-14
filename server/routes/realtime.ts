@@ -12,9 +12,13 @@ function orgStub(env: Bindings, orgId: string) {
 }
 
 export async function pushPresence(env: Bindings, orgId: string, event: PresenceEvent): Promise<void> {
-  await orgStub(env, orgId).fetch('https://do/presence', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(event),
-  })
+  try {
+    await orgStub(env, orgId).fetch('https://do/presence', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(event),
+    })
+  } catch (e) {
+    console.warn('pushPresence failed', orgId, (e as Error).message)
+  }
 }
 
 export const realtime = new Hono<Env>()
