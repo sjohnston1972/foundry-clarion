@@ -34,6 +34,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T21:56Z — Step 6 done: jose dep + server/lib/twilio/token.ts (mintVoiceToken, HS256 Twilio Access Token, Voice+TaskRouter grants) + POST /api/token/voice (503/403/409 branches). vitest 30/30 PASS; typecheck clean. Review: spec ✅, zero findings. commit 5c7aa3a
 
+- 2026-07-14T22:06Z — Step 7 done: server/realtime/presence.ts (pure reducer) + server/realtime/clarion-realtime.ts (ClarionRealtime DO, hibernatable WS hub, state persisted to ctx.storage) + DO re-export. vitest 33/33 PASS (presence 3/3); typecheck clean. Review: spec ✅; 2 Important fixed (persistence, validation); 2 deferred (socket identity/dead-socket cleanup — flag Steven). commits 41c4ffa+f2d2878
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
