@@ -23,7 +23,7 @@ CREATE INDEX idx_cc_agents_org ON cc_agents(organization_id);
 CREATE TABLE cc_skills (
   id              TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL,
-  name            TEXT NOT NULL,
+  name            TEXT NOT NULL COLLATE NOCASE,
   UNIQUE (organization_id, name)
 );
 CREATE INDEX idx_cc_skills_org ON cc_skills(organization_id);
