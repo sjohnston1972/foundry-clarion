@@ -6,6 +6,7 @@ import { health } from './routes/health'
 import { me } from './routes/me'
 import { agents } from './routes/agents'
 import { token } from './routes/token'
+import { realtime } from './routes/realtime'
 import { touchOrgDirectory } from './db/directory'
 import { resolveClarionRole } from './lib/auth'
 
@@ -63,5 +64,6 @@ export function createApp() {
   app.route('/me', me)
   app.route('/agents', agents)
   app.route('/token', token)
+  app.route('/realtime', realtime)
   return app
 }

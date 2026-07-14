@@ -7,6 +7,7 @@ import { insertAgent, getAgentByEmail, listAgents, setAgentStatus, type Agent } 
 import { snapshotAgentSkills } from '../db/skills'
 import { insertAuditLog } from '../db/audit'
 import { createWorker } from '../lib/twilio/provisioning'
+import { pushPresence } from './realtime'
 
 export const agents = new Hono<Env>()
 
@@ -82,5 +83,6 @@ agents.post('/status', requireClarionRole('agent'), async (c) => {
   const agent = await getAgentByEmail(c.env.DB, orgId, email)
   if (!agent) return err(c, 'not_agent', 'Caller is not an enabled agent', 403)
   await setAgentStatus(c.env.DB, orgId, agent.id, status)
+  await pushPresence(c.env, orgId, { identity: agent.email, status, at: Date.now() })
   return c.json({ success: true, data: { id: agent.id, status } })
 })
