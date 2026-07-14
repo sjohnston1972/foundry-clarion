@@ -36,6 +36,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T22:06Z — Step 7 done: server/realtime/presence.ts (pure reducer) + server/realtime/clarion-realtime.ts (ClarionRealtime DO, hibernatable WS hub, state persisted to ctx.storage) + DO re-export. vitest 33/33 PASS (presence 3/3); typecheck clean. Review: spec ✅; 2 Important fixed (persistence, validation); 2 deferred (socket identity/dead-socket cleanup — flag Steven). commits 41c4ffa+f2d2878
 
+- 2026-07-14T22:14Z — Step 8 done: server/routes/realtime.ts (GET /realtime/socket → org DO; pushPresence best-effort) + POST /agents/status pushes presence. vitest 35/35 PASS (realtime-route 2/2); typecheck+lint clean. Review: spec ✅; 1 Important fixed (best-effort push). commits 04b863e+dad71f7
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
