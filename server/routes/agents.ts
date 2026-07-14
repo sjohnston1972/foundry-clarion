@@ -5,6 +5,7 @@ import { requireClarionRole } from '../lib/auth'
 import { findOrgResourceByEmail, listOrgResources, getResourceSkills } from '../db/workspace'
 import { insertAgent, getAgentByEmail, listAgents, setAgentStatus, type Agent } from '../db/agents'
 import { snapshotAgentSkills } from '../db/skills'
+import { insertAuditLog } from '../db/audit'
 import { createWorker } from '../lib/twilio/provisioning'
 
 export const agents = new Hono<Env>()
@@ -54,10 +55,12 @@ agents.post('/enable', requireClarionRole('admin'), async (c) => {
   const skills = await getResourceSkills(c.env.WORKSPACE_DB, resource.id)
   await snapshotAgentSkills(c.env.DB, orgId, id, skills)
 
-  await c.env.DB
-    .prepare(`INSERT INTO cc_audit_log (organization_id, user_id, action, meta_json) VALUES (?, ?, ?, ?)`)
-    .bind(orgId, c.get('user')?.id ?? null, 'agent.enable', JSON.stringify({ agentId: id, email: resource.email, dryRun: worker.dryRun, skills: skills.length }))
-    .run()
+  await insertAuditLog(c.env.DB, {
+    organizationId: orgId,
+    userId: c.get('user')?.id ?? null,
+    action: 'agent.enable',
+    meta: { agentId: id, email: resource.email, dryRun: worker.dryRun, skills: skills.length },
+  })
 
   const agent: Agent = {
     id, organizationId: orgId, userId: null, email: resource.email,

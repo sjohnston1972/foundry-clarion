@@ -62,7 +62,7 @@ function fakeWorkspaceDb() {
 const env = () => ({ DB: fakeDb(), WORKSPACE_DB: fakeWorkspaceDb(), AUTH_ENFORCE: 'true', TWILIO_DRY_RUN: 'true' })
 
 describe('enable-as-agent', () => {
-  it('403s a request with no session', async () => {
+  it('401s a request with no session', async () => {
     const res = await createApp().request('/api/agents', { headers: { 'X-Requested-With': 'fetch' } }, env())
     expect(res.status).toBe(401)
   })
