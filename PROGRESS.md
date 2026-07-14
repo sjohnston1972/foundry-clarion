@@ -10,7 +10,7 @@ entry below when a step is verified done; when all 10 steps are complete create 
 
 ## Status
 
-Step 9 complete. Next: **Step 10 — Green capstone (docs/phase-0-1-status.md; full local gate green; then create DONE and stop).**
+**All 10 steps complete.** Phase 0–1 (bootstrap + auth spine) done and local-verified; `DONE` created; run stops here at the Phase 2 (Twilio) boundary.
 
 ## Log
 
@@ -26,6 +26,7 @@ Step 9 complete. Next: **Step 10 — Green capstone (docs/phase-0-1-status.md; f
 - 2026-07-14T16:12Z — Step 7 done: `.github/workflows/ci.yml` mirroring skills-foundry (push→main + PR→any branch; npm ci → lint → typecheck:server → build → test on Node 20). Verified locally with the Step-7 gate: `vitest run` → 10/10 passed, `typecheck:server` clean, `lint` (oxlint) clean — all exit 0. (CI's `build` step will go green once Steps 8–9 add the SPA; not part of the Step-7 local gate.) commit ed33e99
 - 2026-07-14T16:14Z — Step 8 done: `src/lib/session.ts` — `AuthStatus` type, `classifyGate(status)` → 'signed-out' | 'no-access' | 'app', `fetchAuthStatus()` (GET /api/auth-status, credentials:'include'). Verified: `vitest run test/session.test.ts` → 3 passed (signed-out, no-access, app). commit 6a24d9f
 - 2026-07-14T16:16Z — Step 9 done: `index.html` (title + Google fonts), `src/index.css` (`@import 'tailwindcss'` + `@theme` design tokens: canvas/ink/muted/line/accent + display/sans/mono fonts), `src/main.tsx` (StrictMode + createRoot, minimal — no Workspace-only providers), `src/App.tsx` (fetchAuthStatus → classifyGate → renders signed-out / no-access / app + loading + error; signed-out links to authpak.foundry-ns.com/login?redirect_uri=<current>). Fixed `React.ReactNode` → imported `ReactNode` (verbatimModuleSyntax has no auto React namespace). Verified: `npm run build` (tsc -b && vite build) exit 0, `dist/index.html` present (805 B); `lint` clean. commit 8db0bfa
+- 2026-07-14T16:19Z — Step 10 done (capstone): `docs/phase-0-1-status.md` summarizing Phase 0–1 deliverables + the Phase 2 STOP boundary. Verified full local gate all exit 0: `d1:migrate:local` (no migrations to apply — 0001_init already applied in Step 2), `vitest run` (6 files / 13 tests passed), `npm run build` (tsc -b && vite build, dist produced), `npm run lint` (oxlint clean). commit 2721f6f. **All 10 PLAN.md steps complete — created empty `DONE`; stopping at the Phase 2 (Twilio) boundary.**
 
 ## Blockers
 
