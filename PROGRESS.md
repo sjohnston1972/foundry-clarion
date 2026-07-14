@@ -10,7 +10,7 @@ entry below when a step is verified done; when all 10 steps are complete create 
 
 ## Status
 
-Step 8 complete. Next: **Step 9 — SPA shell (index.html, src/main.tsx, src/App.tsx, src/index.css).**
+Step 9 complete. Next: **Step 10 — Green capstone (docs/phase-0-1-status.md; full local gate green; then create DONE and stop).**
 
 ## Log
 
@@ -25,6 +25,7 @@ Step 8 complete. Next: **Step 9 — SPA shell (index.html, src/main.tsx, src/App
 - 2026-07-14T16:10Z — Step 6 done: wired `verifyFoundrySession` into `server/app.ts` — public `GET /api/auth-status` (never 401s) + enforce middleware on `/api/*` (touches cc_org_directory, resolves clarionRole, sets user/organizationId/clarionRole; AUTH_ENFORCE=true → 401 XHR / 302 HTML→AuthPak login) + `server/routes/me.ts` (`GET /api/me`). Note: PLAN.md's verify text says `connectRole` (stale pre-rename prose); the code + detailed-plan test use `clarionRole` — followed the code. Verified: `vitest run test/app-auth.test.ts` → 3 passed (public logged-out, /api/me 401 unauth, /api/me 200 clarionRole:admin owner-bootstrap); full suite 10/10; `typecheck:server` clean. commit fac0b23
 - 2026-07-14T16:12Z — Step 7 done: `.github/workflows/ci.yml` mirroring skills-foundry (push→main + PR→any branch; npm ci → lint → typecheck:server → build → test on Node 20). Verified locally with the Step-7 gate: `vitest run` → 10/10 passed, `typecheck:server` clean, `lint` (oxlint) clean — all exit 0. (CI's `build` step will go green once Steps 8–9 add the SPA; not part of the Step-7 local gate.) commit ed33e99
 - 2026-07-14T16:14Z — Step 8 done: `src/lib/session.ts` — `AuthStatus` type, `classifyGate(status)` → 'signed-out' | 'no-access' | 'app', `fetchAuthStatus()` (GET /api/auth-status, credentials:'include'). Verified: `vitest run test/session.test.ts` → 3 passed (signed-out, no-access, app). commit 6a24d9f
+- 2026-07-14T16:16Z — Step 9 done: `index.html` (title + Google fonts), `src/index.css` (`@import 'tailwindcss'` + `@theme` design tokens: canvas/ink/muted/line/accent + display/sans/mono fonts), `src/main.tsx` (StrictMode + createRoot, minimal — no Workspace-only providers), `src/App.tsx` (fetchAuthStatus → classifyGate → renders signed-out / no-access / app + loading + error; signed-out links to authpak.foundry-ns.com/login?redirect_uri=<current>). Fixed `React.ReactNode` → imported `ReactNode` (verbatimModuleSyntax has no auto React namespace). Verified: `npm run build` (tsc -b && vite build) exit 0, `dist/index.html` present (805 B); `lint` clean. commit 8db0bfa
 
 ## Blockers
 
