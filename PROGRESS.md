@@ -40,6 +40,18 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T22:21Z — Step 9 done: @twilio/voice-sdk + src/lib/twilio-voice.ts + SoftphonePanel in App.tsx app-gate (register / status / presence; degrades to "not configured" on 503). npm run build exit 0 (dist produced); lint+typecheck clean; vitest 35/35. Review: spec ✅, 3 Minor. commit bc365c7
 
+- 2026-07-14T23:26Z — Step 10 done: full local gate green — d1:migrate:local (no-op, already
+  applied), vitest 35/35 PASS, typecheck:server clean, lint clean, build clean (dist/ produced).
+  `wrangler pages dev` probe: both D1 bindings (incl. WORKSPACE_DB placeholder id) bound fine;
+  DO export not preserved by the Pages Functions bundler (flagged risk materialized) — verified
+  `/api/health` + `/api/auth-status` via a temporary durable_objects-binding removal, then
+  restored wrangler.jsonc byte-identical. docs/phase-2-status.md written; DONE created. All ten
+  Phase 2 steps complete. commit 172aa76
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
+
+None. All ten steps of PLAN.md are complete and verified; DONE has been created per the
+autonomous-run protocol. Phase 3 (live Twilio) requires Steven in-session per the STOP boundary
+in `docs/phase-2-status.md`.
