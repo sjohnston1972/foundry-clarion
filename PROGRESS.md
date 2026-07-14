@@ -38,6 +38,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T22:14Z — Step 8 done: server/routes/realtime.ts (GET /realtime/socket → org DO; pushPresence best-effort) + POST /agents/status pushes presence. vitest 35/35 PASS (realtime-route 2/2); typecheck+lint clean. Review: spec ✅; 1 Important fixed (best-effort push). commits 04b863e+dad71f7
 
+- 2026-07-14T22:21Z — Step 9 done: @twilio/voice-sdk + src/lib/twilio-voice.ts + SoftphonePanel in App.tsx app-gate (register / status / presence; degrades to "not configured" on 503). npm run build exit 0 (dist produced); lint+typecheck clean; vitest 35/35. Review: spec ✅, 3 Minor. commit bc365c7
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
