@@ -1,0 +1,15 @@
+{
+  "name": "foundry-clarion",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "dist",
+  "vars": { "AUTH_ENFORCE": "false" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "foundry-clarion-db",
+      "database_id": "REPLACE_AFTER_TASK_2",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
