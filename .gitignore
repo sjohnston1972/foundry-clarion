@@ -8,3 +8,4 @@ dist
 
 # ccrun state (per-machine, not versioned)
 .ccrun/
+/.multiclaude/
