@@ -3,13 +3,11 @@
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": "dist",
-  "vars": { "AUTH_ENFORCE": "false" },
+  "vars": { "AUTH_ENFORCE": "false", "TWILIO_DRY_RUN": "true" },
   "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "foundry-clarion-db",
-      "database_id": "REPLACE_AFTER_TASK_2",
-      "migrations_dir": "migrations"
-    }
-  ]
+    { "binding": "DB", "database_name": "foundry-clarion-db", "database_id": "REPLACE_AFTER_TASK_2", "migrations_dir": "migrations" },
+    { "binding": "WORKSPACE_DB", "database_name": "skills-foundry-db", "database_id": "REPLACE_WITH_WORKSPACE_DB_ID" }
+  ],
+  "durable_objects": { "bindings": [ { "name": "REALTIME", "class_name": "ClarionRealtime" } ] },
+  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["ClarionRealtime"] } ]
 }
