@@ -10,7 +10,7 @@ entry below when a step is verified done; when all 10 steps are complete create 
 
 ## Status
 
-Step 5 complete. Next: **Step 6 — Auth gate + identity endpoints (wire verifyFoundrySession into server/app.ts, add /api/auth-status + server/routes/me.ts + test/app-auth.test.ts).**
+Step 6 complete. Next: **Step 7 — CI + quality gate (.github/workflows/ci.yml mirroring skills-foundry).**
 
 ## Log
 
@@ -22,6 +22,7 @@ Step 5 complete. Next: **Step 6 — Auth gate + identity endpoints (wire verifyF
 - 2026-07-14T16:05Z — Step 3 done: `server/types.ts`, `server/lib/http.ts`, `server/routes/health.ts`, `server/app.ts` (health mounted pre-gate), `functions/api/[[route]].ts`, `test/health.test.ts`. Verified: `vitest run test/health.test.ts` → 1 passed (200 + {status:'healthy', database:'connected'}). Deviation from plan's verbatim code: `http.ts` uses `status as never` (Workspace's Hono status-code convention) so `typecheck:server` stays clean — the plan's `status: number` failed against Hono's `ContentfulStatusCode`. commit d206abb
 - 2026-07-14T16:06Z — Step 4 done: `server/db/members.ts` (getClarionRole/setClarionRole + ClarionRole type, upsert via ON CONFLICT) and `server/db/directory.ts` (touchOrgDirectory upsert → {disabled}). Verified: `vitest run test/db.test.ts` → 2 passed; `typecheck:server` clean. commit 9389fa7
 - 2026-07-14T16:08Z — Step 5 done: `server/lib/auth.ts` — `resolveClarionRole(db, claims)` (stored cc_members role → else bootstrap AuthPak org owner/admin to Clarion 'admin' → else null) + `requireClarionRole(min)` Hono middleware (403 clarion_no_access / clarion_forbidden by RANK). Confirmed `FoundryClaims` (sub, org_id?, role?) exists in the vendored `@foundry/auth` types before using it. Verified: `vitest run test/auth.test.ts` → 3 passed (stored-role, owner-bootstrap, member-null); `typecheck:server` clean. commit cdfa7d6
+- 2026-07-14T16:10Z — Step 6 done: wired `verifyFoundrySession` into `server/app.ts` — public `GET /api/auth-status` (never 401s) + enforce middleware on `/api/*` (touches cc_org_directory, resolves clarionRole, sets user/organizationId/clarionRole; AUTH_ENFORCE=true → 401 XHR / 302 HTML→AuthPak login) + `server/routes/me.ts` (`GET /api/me`). Note: PLAN.md's verify text says `connectRole` (stale pre-rename prose); the code + detailed-plan test use `clarionRole` — followed the code. Verified: `vitest run test/app-auth.test.ts` → 3 passed (public logged-out, /api/me 401 unauth, /api/me 200 clarionRole:admin owner-bootstrap); full suite 10/10; `typecheck:server` clean. commit fac0b23
 
 ## Blockers
 
