@@ -30,6 +30,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T21:41Z — Step 4 done: server/lib/twilio/provisioning.ts (DRY_RUN gate: fake WKdryrun_ sids, no network; live fetch path guarded). vitest 3/3 PASS; typecheck clean. Review: spec ✅ (5 safety props verified), 2 Minor. commit 09438b8
 
+- 2026-07-14T21:52Z — Step 5 done: server/routes/agents.ts (enable/list/candidates/status) mounted after enforce gate; server/db/audit.ts extracted. vitest 28/28 (new agents-route 3/3) PASS; typecheck clean. Review: 2 Important plan-mandated → 1 fixed (audit accessor), 1 accepted (middleware-first role gate, confirm w/ Steven). commits da8adf1+ddd1e7c
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
