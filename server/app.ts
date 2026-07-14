@@ -4,6 +4,7 @@ import type { Env } from './types'
 import { apiOnError, err } from './lib/http'
 import { health } from './routes/health'
 import { me } from './routes/me'
+import { agents } from './routes/agents'
 import { touchOrgDirectory } from './db/directory'
 import { resolveClarionRole } from './lib/auth'
 
@@ -59,5 +60,6 @@ export function createApp() {
   })
 
   app.route('/me', me)
+  app.route('/agents', agents)
   return app
 }
