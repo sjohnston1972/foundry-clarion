@@ -28,6 +28,8 @@ subagent-driven development; steps mirror the 10 tasks in the detailed plan. All
 
 - 2026-07-14T21:36Z — Step 3 done: server/db/agents.ts + server/db/skills.ts (cc_agents/cc_skills/cc_agent_skills accessors, snapshot). vitest 3/3 PASS incl cross-tenant leak; typecheck clean. Review: spec ✅, 2 Minor. commit badc397
 
+- 2026-07-14T21:41Z — Step 4 done: server/lib/twilio/provisioning.ts (DRY_RUN gate: fake WKdryrun_ sids, no network; live fetch path guarded). vitest 3/3 PASS; typecheck clean. Review: spec ✅ (5 safety props verified), 2 Minor. commit 09438b8
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, then create DONE and stop. -->
