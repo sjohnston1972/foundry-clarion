@@ -122,3 +122,27 @@ PASS: closed identity removed from roster; survivor untouched
   `applyPresence` contract from Phase 2, unchanged by this step.
 - Gate exits 0 (39/39 tests, typecheck, lint, build).
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 17:52 — Step 5 done: documentation debt in CLAUDE.md
+
+- §8: replaced the stale "Hono as Pages Functions — `functions/api/[[route]].ts`" line with
+  the actual setup — Hono served from Cloudflare Workers with static assets, entrypoint
+  `server/worker.ts` (also exports the `ClarionRealtime` DO class per `wrangler.jsonc` `main`).
+- §12: added "The `DEV_AUTH` exception" with all five boundaries copied **verbatim** from
+  spec §3.1 (defaults off; local `wrangler dev`/tests only; never in
+  `wrangler.jsonc`/CI/deploy; a test asserts rejection when unset; dev keypair is not an
+  AuthPak key; the on-anywhere-else-stop rail), plus a pointer to the implementation files
+  and the spec.
+- §14 (new): "Design system" — records the vendored-snapshot mechanism (Workspace's
+  `@theme` block + `ui.tsx` copied verbatim with provenance headers), that `AppShell.tsx`
+  deliberately does **not** port, that `test/design-drift.test.ts` is the guard, and that a
+  shared `@foundry/ui` package is out of scope while Clarion is read-only on
+  `skills-foundry`. Written ahead of Step 9, which builds the file this section describes —
+  consistent with the plan's explicit instruction for this step.
+- §11: checked off the `DEV_AUTH` and UI-look-and-feel open questions (both resolved
+  2026-07-15), added a new open item for the future `@foundry/ui` extraction.
+- Verified: `git grep -n "functions/api" CLAUDE.md` → no output;
+  `git grep -n "DEV_AUTH" CLAUDE.md` → 6 hits (§11, §12 x5). Gate exits 0 (39/39 tests,
+  typecheck, lint, build).
+- Commit `2956915`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
