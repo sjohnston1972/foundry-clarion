@@ -193,3 +193,35 @@ PASS: closed identity removed from roster; survivor untouched
   `"true"`.
 - Commit `8299fd8`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 18:03 — Step 8 done: inbound TwiML + status webhooks (signature-validated)
+
+- `server/lib/twilio/signature.ts`: implements Twilio's request-signing algorithm
+  (HMAC-SHA1 over `url + sorted "key"+"value" pairs`, base64, via Web Crypto —
+  `crypto.subtle`, Workers-native), `computeTwilioSignature` (exported for tests) and
+  `isValidTwilioSignature` (fails closed: no auth token or no header ⇒ invalid; constant-time
+  string compare).
+- `server/routes/voice.ts`: `POST /api/voice/inbound` and `POST /api/voice/status`. Both
+  parse the Twilio form body once, validate `X-Twilio-Signature` first (before touching the
+  DB), and reject 403 on mismatch. Inbound returns `<Response><Enqueue
+  workflowSid="...">...</Enqueue></Response>` TwiML; status writes/updates a `cc_calls` row
+  (disposition, duration, agent) and pushes an event to the org DO via the existing
+  `pushPresence` sibling in `server/routes/realtime.ts`.
+- **Design call**: no `cc_numbers` table exists in this run's scope (not in the Arc B plan —
+  only queues/membership/calls), so there is no dialed-number → org/queue lookup available.
+  Both webhooks resolve the org and queue via `?orgId=&queueId=` on the webhook URL, which
+  is configured per-number in the Twilio console (a real, supported pattern) rather than
+  invented API surface. Flagged here for visibility, not filed as a change request since it
+  doesn't touch a sibling repo — `cc_numbers` + number-to-webhook-URL provisioning is future
+  work (Phase 4/webhook-URL work), not a blocker for this dry-run-only step.
+- `server/app.ts`: `/voice` mounted **before** the `app.use('/*', verifyFoundrySession...)`
+  gate, alongside `/health` and `/dev` — these are Twilio-called, not browser-called, and
+  authenticate via the signature header instead of the `fnd_session` cookie.
+- Tests (`test/voice-route.test.ts`, 5): missing signature → 403; invalid signature → 403;
+  valid signature → 200 with TwiML containing `<Enqueue workflowSid="WWabc123">`; status
+  webhook with a valid signature writes a `cc_calls` row and pushes a `/presence` event to
+  the fake org DO stub; status webhook with a missing signature → 403.
+- Verified: `npx vitest run test/voice-route.test.ts` → 5/5 pass. Gate exits 0 (59/59 tests,
+  typecheck, lint, build).
+- Commit `f1d3913`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
