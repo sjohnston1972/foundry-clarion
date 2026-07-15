@@ -146,3 +146,27 @@ PASS: closed identity removed from roster; survivor untouched
   typecheck, lint, build).
 - Commit `2956915`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 17:55 — Step 6 done: schema + typed accessors for queues, membership, calls
+
+- `migrations/0003_queues_calls.sql`: `cc_queues` (id, organization_id, name,
+  twilio_workflow_sid, strategy, created_at; unique on org+name), `cc_queue_members`
+  (queue_id, agent_id, priority; composite PK, FKs to `cc_queues`/`cc_agents` with
+  `ON DELETE CASCADE`), `cc_calls` (id, organization_id, twilio_call_sid, from_e164,
+  to_e164, queue_id, agent_id, disposition, duration_s, started_at; unique on
+  org+twilio_call_sid, FKs `ON DELETE SET NULL`). All three indexed by `organization_id`
+  per design §4.
+- `server/db/queues.ts`: `insertQueue`, `getQueueById`, `listQueues`, `deleteQueue`,
+  `addQueueMember`/`removeQueueMember`/`listQueueMembers` — mirrors `server/db/agents.ts`'s
+  shape (typed row mapper, org-scoped WHERE clauses throughout).
+- `server/db/calls.ts`: `insertCall`, `getCallBySid`, `listCallsForOrg`,
+  `updateCallOutcome` (disposition/duration/agent) — same shape.
+- Tests: `test/queues-migration.test.ts` (mirrors `test/agents-migration.test.ts`, asserts
+  the three tables and their org-scoping/FK constraints exist in the SQL); `test/queues-
+  db.test.ts` and `test/calls-db.test.ts` (insert/read/list/delete/update against an
+  in-memory fake D1, **each including a cross-tenant leak test** — org B cannot read org
+  A's queues or calls via `getQueueById`/`getCallBySid`/`listQueues`/`listCallsForOrg`).
+- Verified: `npm run d1:migrate:local` applied `0003_queues_calls.sql` cleanly (10 SQL
+  commands, ✅). Gate exits 0 (48/48 tests, typecheck, lint, build).
+- Commit `e3e53e1`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
