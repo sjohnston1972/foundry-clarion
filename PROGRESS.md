@@ -59,6 +59,13 @@ Workers-with-static-assets, proven by a live WebSocket handshake (HTTP 101) unde
   Matches PLAN.md Step 1's expected text exactly. Confirms the blocker this run exists to kill.
   Committed (evidence only, no code changes).
 
+- 2026-07-15T13:15Z — Step 2 done: added `server/worker.ts` (`export default createApp()` +
+  `export { ClarionRealtime } from './realtime/clarion-realtime'`), `functions/api/[[route]].ts`
+  left untouched. `npx vitest run` → 14 files / 35 tests PASS; `npm run typecheck:server` →
+  clean. `npm run pages:dev` re-run and still fails with the identical Step 1 error text
+  (`ClarionRealtime` not exported in `functionsWorker-*.mjs`), confirming nothing else moved.
+  commit 07f4694.
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, end the run, and stop. -->
