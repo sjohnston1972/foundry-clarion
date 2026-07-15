@@ -7,8 +7,10 @@ import { me } from './routes/me'
 import { agents } from './routes/agents'
 import { token } from './routes/token'
 import { realtime } from './routes/realtime'
+import { dev } from './routes/dev'
 import { touchOrgDirectory } from './db/directory'
 import { resolveClarionRole } from './lib/auth'
+import { isDevAuth, devVerifyOptions } from './lib/dev-auth'
 
 const AUTHPAK_LOGIN = 'https://authpak.foundry-ns.com/login'
 
@@ -19,9 +21,17 @@ export function createApp() {
   // Pre-gate, always public.
   app.route('/health', health)
 
+  // Dev-only session minting: invisible (404) unless DEV_AUTH === 'true'.
+  // Never set DEV_AUTH in wrangler.jsonc/CI/deploy — local wrangler dev and tests only.
+  app.use('/dev/*', async (c, next) => {
+    if (!isDevAuth(c.env)) return c.notFound()
+    return next()
+  })
+  app.route('/dev', dev)
+
   // Public routing probe for the SPA gate (never 401s).
   app.get('/auth-status', async (c) => {
-    const claims = await verifyFoundrySession(c.req.raw)
+    const claims = await verifyFoundrySession(c.req.raw, isDevAuth(c.env) ? await devVerifyOptions() : undefined)
     let disabled = false
     if (claims?.org_id) {
       const d = await touchOrgDirectory(c.env.DB, {
@@ -40,7 +50,7 @@ export function createApp() {
 
   // Enforce gate for everything else.
   app.use('/*', async (c, next) => {
-    const claims = await verifyFoundrySession(c.req.raw)
+    const claims = await verifyFoundrySession(c.req.raw, isDevAuth(c.env) ? await devVerifyOptions() : undefined)
     if (!claims) {
       if (c.env.AUTH_ENFORCE === 'true') {
         const wantsHtml = (c.req.header('accept') ?? '').includes('text/html')

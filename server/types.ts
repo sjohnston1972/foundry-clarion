@@ -8,6 +8,9 @@ export type Bindings = {
   REALTIME: DurableObjectNamespace
   /** When 'true', a valid AuthPak session is REQUIRED (set at cutover). */
   AUTH_ENFORCE?: string
+  /** Dev-only ('true' exactly): local-keypair session verify + /api/dev/session.
+   *  NEVER set in wrangler.jsonc, CI, or any deployed environment. */
+  DEV_AUTH?: string
   /** When 'true' (default), Twilio account-mutating calls are stubbed with fake SIDs. */
   TWILIO_DRY_RUN?: string
   ADMIN_EMAILS?: string
