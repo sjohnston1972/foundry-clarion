@@ -279,3 +279,43 @@ authored.
   build).
 - Commit `a6fc2a8`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 18:20 — Step 10 done: app shell + auth gate, routing wired
+
+- `src/components/AppShell.tsx` (new): Clarion's own — sidebar nav (Softphone, Agents,
+  Queues, Wallboard with lucide icons), header showing `email · clarionRole`, `<Outlet
+  context={status}/>` — built on the vendored primitives and `cn`, mirroring Workspace's
+  *structure* only. Did **not** port `skills-foundry`'s 641-line `AppShell.tsx` (departments/
+  plans/billing/tickets/command palette Clarion doesn't have), per the plan's explicit rail.
+- `src/components/AuthGate.tsx` (new): the gate card extracted from `src/App.tsx`, now built
+  on vendored `Card` instead of a hand-rolled div. Preserves all three `Gate` states
+  (signed-out, no-access, app) plus the pre-classification loading/error states; on success
+  renders `<Outlet context={status}/>` instead of the shell itself, handing `status` down to
+  `AppShell` via `useOutletContext`.
+- `src/App.tsx`: added `react-router-dom` routes — `<AuthGate>` wraps `<AppShell>` wraps an
+  index route (`SoftphonePanel`, left **unchanged in place** — Step 13 replaces it with
+  `src/pages/Softphone.tsx`) plus `/agents`, `/queues`, `/wallboard` stub routes rendering
+  vendored `EmptyState` until Steps 11/12/14 build the real pages. Removed the old inline
+  `Shell`/`SignedOut`/`NoAccess`/`AppShell` functions (moved to `AuthGate.tsx`/
+  `AppShell.tsx`) — the old local `AppShell` name would otherwise have collided with the
+  new import.
+- `src/main.tsx`: wraps `<App/>` in `<BrowserRouter>`.
+- **Bug found and fixed in passing**: `vite.config.ts`'s dev proxy still pointed at
+  `127.0.0.1:8788` — the deleted Pages Functions dev port. The Worker migration moved
+  `wrangler dev` to `:8787`; this was silently broken (no Playwright spec had driven the
+  live app + API together before Step 10) and is now fixed to `localhost:8787` (`localhost`,
+  not `127.0.0.1` — same resolution issue as Step 9's Playwright note).
+- **Playwright** (`test/e2e/app-shell.spec.ts`, 2 tests): `playwright.config.ts`'s
+  `webServer` now starts **both** `wrangler dev` (DEV_AUTH via `.dev.vars`, added in Step 3,
+  never committed) and `vite dev`, since this spec needs the live API. Test 1 POSTs
+  `/api/dev/session` via `context.request` (shares cookie storage with `page`), loads `/`,
+  asserts all four nav links (`Softphone`/`Agents`/`Queues`/`Wallboard`) are visible,
+  screenshots to `docs/runs/2026-07-15-phase-3-and-ui/step-10-shell.png` (viewed — sidebar
+  with active-state highlight on Softphone, header identity, softphone panel in the main
+  area). Test 2: no cookie → the sign-in card still renders.
+- Verified: `npx playwright test` → 3/3 pass (both new tests + Step 9's still-passing
+  fixture test). Full gate exits 0 (64/64 vitest tests, typecheck, lint, build — `vite
+  build` now transforms 1830 modules vs. 59 before, reflecting `react-router-dom` +
+  `lucide-react` entering the bundle graph via the new shell).
+- Commit `1d690f0`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
