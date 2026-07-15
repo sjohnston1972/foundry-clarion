@@ -9,3 +9,7 @@ dist
 # ccrun state (per-machine, not versioned)
 .ccrun/
 /.multiclaude/
+
+# Playwright run artifacts (screenshots we intentionally keep live under docs/runs/)
+/test-results/
+/playwright-report/

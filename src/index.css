@@ -1,9 +1,16 @@
 @import 'tailwindcss';
 
 /* ── Foundry Clarion design tokens ──────────────────────────────────────────
-   Mirrors Workspace's cool-neutral canvas + slate ink + single accent. The
-   Phase 0–1 shell only needs the gate screens, so this is the minimal token
-   set; expand as the agent console lands in later phases. Light only. */
+   Vendored from Foundry Workspace (skills-foundry) so the two apps never
+   visually drift — see CLAUDE.md §14. The @theme block, :root accent vars,
+   .tabular, and the scrollbar rules below are copied verbatim.
+   Source: skills-foundry src/index.css, last touched 35e268c
+   (repo HEAD 29ed077 at vendoring time). Guarded by test/design-drift.test.ts.
+   Clarion fixes --accent at #00a3ff in :root rather than switching it per
+   department at runtime (one app, no departments) — the indirection itself
+   (the var(--accent, ...) fallback) is unchanged from Workspace. Workspace's
+   `.md` (chat markdown) and `.react-flow__node` (org chart) rules are
+   deliberately not vendored — Clarion has neither feature. */
 
 @theme {
   --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
@@ -12,10 +19,28 @@
 
   --color-canvas: #f6f7f9;
   --color-surface: #ffffff;
+  --color-raised: #fcfcfd;
   --color-ink: #0f172a;
+  --color-ink-2: #334155;
   --color-muted: #64748b;
+  --color-faint: #94a3b8;
   --color-line: #e6e8ec;
-  --color-accent: #00a3ff;
+  --color-line-2: #eef0f3;
+
+  /* Accent is set at runtime per active department (see setDepartmentAccent). */
+  --color-accent: var(--accent, #00a3ff);
+  --color-accent-soft: var(--accent-soft, #e6f5ff);
+
+  --radius-card: 14px;
+
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.03);
+  --shadow-pop: 0 12px 32px -8px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+:root {
+  color-scheme: light;
+  --accent: #00a3ff;
+  --accent-soft: #e6f5ff;
 }
 
 html,
@@ -29,4 +54,25 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numeric data should always feel like an instrument readout. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d7dbe0;
+  border-radius: 999px;
+  border: 3px solid var(--color-canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c2c8d0;
 }

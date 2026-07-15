@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Clarion design tokens — Step 9 verification fixture</title>
+  </head>
+  <body>
+    <!-- Dev-only fixture: proves the vendored tokens + ui.tsx render together.
+         Not part of the shipped app (never referenced by src/main.tsx or index.html),
+         not included in `vite build` output. See test/e2e/design-tokens.spec.ts. -->
+    <div id="root"></div>
+    <script type="module" src="./design-tokens-main.tsx"></script>
+  </body>
+</html>
