@@ -81,6 +81,17 @@ Workers-with-static-assets, proven by a live WebSocket handshake (HTTP 101) unde
   Durable Object binding (`durable_objects` no longer needs `functions/api/[[route]].ts` to
   re-export it). commit fad0627.
 
+- 2026-07-15T13:45Z — Step 4 done: npm scripts updated. `pages:dev` → `dev:worker`
+  (`wrangler dev`); `pages:deploy` → `deploy` (`npm run build && wrangler deploy`). `dev`,
+  `build`, `test`, `lint`, `typecheck:server`, `d1:migrate:local`, `d1:migrate:remote` left
+  untouched — confirmed via `git diff --cached package.json`. `npm run build` → exit 0
+  (dist/ emitted); `npm run dev:worker` started cleanly under a 15s timeout, "Ready on
+  http://127.0.0.1:8787", same clean bindings table as Step 3. `git grep -n
+  "pages:dev\|pages:deploy"` → remaining hits are only PLAN.md (this run's own steps),
+  PROGRESS.md (historical log), and archived `docs/` plans/status; a scoped grep excluding
+  those three paths returned nothing, and `.github/workflows/ci.yml` does not reference either
+  script. commit b949495.
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, end the run, and stop. -->
