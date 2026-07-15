@@ -170,3 +170,26 @@ PASS: closed identity removed from roster; survivor untouched
   commands, ✅). Gate exits 0 (48/48 tests, typecheck, lint, build).
 - Commit `e3e53e1`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 17:58 — Step 7 done: queues API + Workflow provisioning (dry-run)
+
+- `server/lib/twilio/provisioning.ts`: added `createWorkflow`, following the existing
+  `createWorker`/`isDryRun` pattern exactly — dry-run returns a deterministic
+  `WWdryrun_<uuid>` and makes no network call; the live path (POST to
+  `.../Workspaces/{sid}/Workflows`) is written but unreachable while
+  `TWILIO_DRY_RUN !== 'false'`.
+- `server/db/queues.ts`: added `updateQueue` (name/strategy patch) so the route layer has
+  no raw SQL, per CLAUDE.md §10.
+- `server/routes/queues.ts` (new), mounted at `/api/queues` in `server/app.ts`:
+  `GET /` and `GET /:id/members` (supervisor+); `POST /`, `PATCH /:id`, `DELETE /:id`,
+  `POST /:id/members`, `DELETE /:id/members/:agentId` (admin). Input validation → auth
+  check → business logic → response throughout.
+- `test/queues-route.test.ts` (6 tests): agent gets 403 on both create and list; supervisor
+  gets 403 on create but 200 on list; admin creates a queue and gets a `WWdryrun_`-prefixed
+  `twilioWorkflowSid`; a `fetch` spy asserts **no call to `taskrouter.twilio.com`** occurs
+  during dry-run creation; empty `name` is rejected with 400.
+- Verified: `npx vitest run test/queues-route.test.ts` → 6/6 pass. Gate exits 0 (54/54
+  tests, typecheck, lint, build). `git grep -n "TWILIO_DRY_RUN" wrangler.jsonc` still shows
+  `"true"`.
+- Commit `8299fd8`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
