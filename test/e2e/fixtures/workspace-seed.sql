@@ -14,6 +14,8 @@ DELETE FROM resources WHERE id = 'step12-res-1';
 DELETE FROM departments WHERE id = 'step12-dept-1';
 DELETE FROM resources WHERE id = 'step13-res-1';
 DELETE FROM departments WHERE id = 'step13-dept-1';
+DELETE FROM resources WHERE id = 'step14-res-1';
+DELETE FROM departments WHERE id = 'step14-dept-1';
 
 INSERT INTO departments (id, organization_id) VALUES ('step11-dept-1', 'org-step11');
 INSERT INTO resources (id, name, email, job_role, department_id)
@@ -29,3 +31,9 @@ INSERT INTO resources (id, name, email, job_role, department_id)
 INSERT INTO departments (id, organization_id) VALUES ('step13-dept-1', 'org-step13');
 INSERT INTO resources (id, name, email, job_role, department_id)
   VALUES ('step13-res-1', 'Cara Agent', 'cara.agent@example.com', 'Support', 'step13-dept-1');
+
+-- Step 14: same shape for org-step14 — the Wallboard spec changes this agent's status
+-- via the API and expects a live presence tile.
+INSERT INTO departments (id, organization_id) VALUES ('step14-dept-1', 'org-step14');
+INSERT INTO resources (id, name, email, job_role, department_id)
+  VALUES ('step14-res-1', 'Dana Agent', 'dana.agent@example.com', 'Support', 'step14-dept-1');

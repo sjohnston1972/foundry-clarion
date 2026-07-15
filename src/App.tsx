@@ -1,14 +1,10 @@
 import { Routes, Route } from 'react-router-dom'
 import { AuthGate } from './components/AuthGate'
 import { AppShell } from './components/AppShell'
-import { EmptyState } from './components/ui'
 import Softphone from './pages/Softphone'
 import Agents from './pages/Agents'
 import Queues from './pages/Queues'
-
-function ComingSoon({ title }: { title: string }) {
-  return <EmptyState title={title} hint="This page lands in a later step of the current run." />
-}
+import Wallboard from './pages/Wallboard'
 
 export default function App() {
   return (
@@ -21,7 +17,7 @@ export default function App() {
           <Route path="softphone" element={<Softphone />} />
           <Route path="agents" element={<Agents />} />
           <Route path="queues" element={<Queues />} />
-          <Route path="wallboard" element={<ComingSoon title="Wallboard" />} />
+          <Route path="wallboard" element={<Wallboard />} />
         </Route>
       </Route>
     </Routes>
