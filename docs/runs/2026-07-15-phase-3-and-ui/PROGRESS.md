@@ -436,3 +436,46 @@ authored.
   typecheck, lint, build).
 - Commit `cf52d90`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 23:07 — Step 15: capstone — final gate green, run closed
+
+Final gate output (tail, verbatim):
+
+```
+ Test Files  21 passed (21)
+      Tests  64 passed (64)
+   Start at  23:06:32
+   Duration  4.32s
+
+> foundry-clarion@0.1.0 typecheck:server
+> tsc -p tsconfig.server.json --noEmit
+
+> foundry-clarion@0.1.0 lint
+> oxlint
+
+> foundry-clarion@0.1.0 build
+> tsc -b && vite build
+
+vite v8.1.4 building client environment for production...
+✓ 1882 modules transformed.
+dist/index.html                   0.82 kB │ gzip:   0.43 kB
+dist/assets/index-COzfe2l5.css   18.74 kB │ gzip:   4.58 kB
+dist/assets/index-ORT0aylf.js   494.29 kB │ gzip: 144.61 kB
+✓ built in 905ms
+```
+
+Safety confirmations (verbatim):
+
+```
+$ git grep -n "TWILIO_DRY_RUN" wrangler.jsonc
+wrangler.jsonc:11:  "vars": { "AUTH_ENFORCE": "false", "TWILIO_DRY_RUN": "true" },
+$ git grep -n "DEV_AUTH" wrangler.jsonc
+(no output)
+```
+
+No live Twilio call was ever made this run; `DEV_AUTH` appears in no deployed config.
+Playwright: 7/7 specs passing as of Step 14. Run closed per CLAUDE.md: this file and
+PLAN.md archived to `docs/runs/2026-07-15-phase-3-and-ui/` alongside the five step
+screenshots; DONE written as the handoff note. Push of the whole branch remains blocked on
+the `workflow`-scope credential (see Step 1) — every commit is local; first action for the
+interactive session is `gh auth refresh -s workflow` then `git push`.
