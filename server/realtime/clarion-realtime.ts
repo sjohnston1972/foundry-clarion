@@ -21,9 +21,13 @@ export class ClarionRealtime extends DurableObject<Bindings> {
     const url = new URL(req.url)
     if (url.pathname.endsWith('/socket')) {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 })
+      const identity = url.searchParams.get('identity')
       const pair = new WebSocketPair()
       const [client, server] = [pair[0], pair[1]]
       this.ctx.acceptWebSocket(server)
+      // Attach the route-supplied identity (never client-supplied) so
+      // webSocketClose can clean up; attachments survive hibernation.
+      if (identity) server.serializeAttachment({ identity })
       server.send(snapshotMessage(this.state))
       return new Response(null, { status: 101, webSocket: client })
     }
@@ -64,6 +68,13 @@ export class ClarionRealtime extends DurableObject<Bindings> {
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
+    const attachment = ws.deserializeAttachment() as { identity?: string } | null
+    const identity = attachment?.identity
+    if (identity) {
+      this.state = applyPresence(this.state, { identity, status: 'offline', at: Date.now() })
+      await this.persist()
+      this.broadcast(snapshotMessage(this.state))
+    }
     try { ws.close() } catch { /* already closed */ }
   }
 

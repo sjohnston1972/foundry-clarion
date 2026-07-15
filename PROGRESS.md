@@ -90,3 +90,35 @@ the org's live `ClarionRealtime` Durable Object, answering **101** with a
 rail, this live handshake stands as the run's DO proof.
 
 Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 16:29 — Step 4 done: DO socket identity + disconnect cleanup
+
+- `server/routes/realtime.ts`: the socket route now pins the **session** email onto the
+  forwarded DO URL (`?identity=`) — the DO never trusts a client-supplied identity; 400 if
+  the session somehow has no email.
+- `server/realtime/clarion-realtime.ts`: on upgrade the DO attaches the route-supplied
+  identity with `serializeAttachment` (survives hibernation); `webSocketClose` recovers it
+  via `deserializeAttachment`, applies an `offline` presence event, persists, broadcasts.
+- Tests (Step 2-rail fallback, reduced coverage acknowledged): the disconnect-cleanup
+  semantics are asserted at the `applyPresence` level in `test/presence.test.ts`
+  (two identities, one goes offline, survivor untouched, snapshot correct), and
+  `test/realtime-route.test.ts` now asserts the route pins `identity=agent@acme.com` on
+  the forwarded URL. The DO's own attach/close path is not executed by vitest on this
+  machine (no workers project — see Step 2 Blockers).
+- **Compensating live verification** (real DO under `wrangler dev`, throwaway Node client,
+  deleted after; server stopped cleanly). Verbatim tail:
+
+```
+A(ada): handshake -> 101
+B(bob): handshake -> 101
+B frame: {"type":"presence","agents":[{"identity":"ada@x.com","status":"available","at":10},{"identity":"bob@x.com","status":"on-call","at":20}]}
+--- closing A (client close frame) ---
+B frame: {"type":"presence","agents":[{"identity":"bob@x.com","status":"on-call","at":20}]}
+PASS: closed identity removed from roster; survivor untouched
+```
+
+- Note: with the current reducer, `offline` **removes** the identity from the roster (the
+  snapshot omits it) rather than listing it with an `offline` status — that is the existing
+  `applyPresence` contract from Phase 2, unchanged by this step.
+- Gate exits 0 (39/39 tests, typecheck, lint, build).
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.

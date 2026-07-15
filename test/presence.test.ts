@@ -17,4 +17,15 @@ describe('applyPresence', () => {
     expect(msg.type).toBe('presence')
     expect(msg.agents).toEqual([{ identity: 'ada@x.com', status: 'available', at: 1 }])
   })
+  // Step 4 fallback coverage (no workers project on this machine): the DO's
+  // webSocketClose applies exactly this event for the socket's attached identity.
+  it('disconnect cleanup: offline for one identity leaves the survivor untouched', () => {
+    let s = applyPresence({}, { identity: 'ada@x.com', status: 'available', at: 1 })
+    s = applyPresence(s, { identity: 'bob@x.com', status: 'on-call', at: 2 })
+    s = applyPresence(s, { identity: 'ada@x.com', status: 'offline', at: 3 })
+    expect(s['ada@x.com']).toBeUndefined()
+    expect(s['bob@x.com']).toEqual({ status: 'on-call', at: 2 })
+    const msg = JSON.parse(snapshotMessage(s))
+    expect(msg.agents).toEqual([{ identity: 'bob@x.com', status: 'on-call', at: 2 }])
+  })
 })

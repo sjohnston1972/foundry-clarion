@@ -51,11 +51,13 @@ function fakeDb() {
 }
 
 describe('realtime + status push', () => {
-  it('forwards a WS upgrade to the org DO', async () => {
+  it('forwards a WS upgrade to the org DO with the session identity pinned', async () => {
     const seen: Request[] = []
     const res = await createApp().request('/api/realtime/socket', { headers: { cookie: 'fnd_session=agent', Upgrade: 'websocket' } }, { DB: fakeDb(), REALTIME: fakeRealtime(seen), AUTH_ENFORCE: 'true' })
     expect(res.status).toBe(101)
     expect(seen.length).toBe(1)
+    // The route, not the client, decides the identity the DO attaches (Step 4).
+    expect(new URL(seen[0].url).searchParams.get('identity')).toBe('agent@acme.com')
   })
   it('status change pushes a presence event to the DO', async () => {
     const seen: Request[] = []

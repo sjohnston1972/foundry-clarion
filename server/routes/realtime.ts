@@ -27,6 +27,12 @@ export const realtime = new Hono<Env>()
 realtime.get('/socket', requireClarionRole('agent'), async (c) => {
   const orgId = c.get('organizationId')
   if (!orgId) return err(c, 'no_org', 'No organization in session', 400)
+  const email = c.get('user')?.email
+  if (!email) return err(c, 'no_identity', 'No identity in session', 400)
   if (c.req.header('Upgrade') !== 'websocket') return err(c, 'expected_ws', 'Expected a WebSocket upgrade', 426)
-  return orgStub(c.env, orgId).fetch(new Request('https://do/socket', c.req.raw))
+  // The DO must not trust a client-supplied identity: the route (which knows
+  // the session) pins it on the forwarded URL for disconnect cleanup.
+  const url = new URL('https://do/socket')
+  url.searchParams.set('identity', email)
+  return orgStub(c.env, orgId).fetch(new Request(url, c.req.raw))
 })
