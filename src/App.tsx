@@ -6,6 +6,7 @@ import { AuthGate } from './components/AuthGate'
 import { AppShell } from './components/AppShell'
 import { EmptyState } from './components/ui'
 import Agents from './pages/Agents'
+import Queues from './pages/Queues'
 
 type RegisterState = 'idle' | 'registering' | 'registered' | 'unavailable' | 'error'
 type AgentStatusValue = 'offline' | 'available' | 'on-call' | 'wrap-up'
@@ -108,7 +109,7 @@ export default function App() {
               src/pages/Softphone.tsx (see PLAN.md Step 13). */}
           <Route index element={<SoftphonePanel />} />
           <Route path="agents" element={<Agents />} />
-          <Route path="queues" element={<ComingSoon title="Queues" />} />
+          <Route path="queues" element={<Queues />} />
           <Route path="wallboard" element={<ComingSoon title="Wallboard" />} />
         </Route>
       </Route>

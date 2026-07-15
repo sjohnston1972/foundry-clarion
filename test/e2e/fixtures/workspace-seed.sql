@@ -10,7 +10,14 @@ CREATE TABLE IF NOT EXISTS resource_sub_skills (resource_id TEXT, sub_skill_id I
 
 DELETE FROM resources WHERE id = 'step11-res-1';
 DELETE FROM departments WHERE id = 'step11-dept-1';
+DELETE FROM resources WHERE id = 'step12-res-1';
+DELETE FROM departments WHERE id = 'step12-dept-1';
 
 INSERT INTO departments (id, organization_id) VALUES ('step11-dept-1', 'org-step11');
 INSERT INTO resources (id, name, email, job_role, department_id)
   VALUES ('step11-res-1', 'Ada Candidate', 'ada.candidate@example.com', 'Support', 'step11-dept-1');
+
+-- Step 12: an enable-able resource for org-step12 so the Queues page has an agent to assign.
+INSERT INTO departments (id, organization_id) VALUES ('step12-dept-1', 'org-step12');
+INSERT INTO resources (id, name, email, job_role, department_id)
+  VALUES ('step12-res-1', 'Bea Candidate', 'bea.candidate@example.com', 'Support', 'step12-dept-1');
