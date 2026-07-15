@@ -3,8 +3,11 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
-// Frontend dev server proxies /api to `wrangler pages dev` (default :8788),
-// so the SPA and Pages Functions share one origin in development (no CORS).
+// Frontend dev server proxies /api to `wrangler dev` (the Worker — see
+// CLAUDE.md §8, this stopped being Pages Functions in the Workers migration),
+// so the SPA and Worker share one origin in development (no CORS). Uses the
+// 'localhost' hostname, not '127.0.0.1' — direct-IP fetches don't resolve to
+// the dev server in this environment (see PROGRESS.md Step 9's Playwright note).
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -16,7 +19,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8788',
+        target: 'http://localhost:8787',
         changeOrigin: true,
       },
     },
