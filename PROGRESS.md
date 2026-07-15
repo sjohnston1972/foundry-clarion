@@ -356,3 +356,28 @@ authored.
   Full gate exits 0 (64/64 vitest tests, typecheck, lint, build).
 - Commit `28cfbef`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 22:54 — Step 12 done: Queues page (list, create, assign agents)
+
+- `src/pages/Queues.tsx` (new, routed at `/queues` replacing the Step 10 stub), vendored
+  primitives only: queue list (name; `WWdryrun_` Workflow SID surfaced in a `.tabular`
+  readout **as the plan explicitly requires** — dry-run SIDs visible, not hidden; strategy
+  `Badge`), per-queue member roster (accent badges, agent ids mapped to emails via the
+  agents query), an assign-agent `<select>` (only unassigned agents offered) + Assign
+  button, and a create-queue card. React Query with invalidation on create/assign; labeled
+  `<section>`s and `aria-label`ed member lists so tests scope unambiguously (the select and
+  the roster can contain the same email text).
+- `test/e2e/fixtures/workspace-seed.sql`: extended with an `org-step12` department +
+  resource (`bea.candidate@example.com`) so the assign flow has an agent; re-applied to the
+  local WORKSPACE_DB emulation (delete-then-insert, idempotent).
+- `test/e2e/queues-page.spec.ts`: DEV_AUTH sign-in (org-step12) → enables the seeded
+  candidate via the API (`[201, 409]` tolerated so reruns pass) → creates a queue named
+  `Support <timestamp>` (unique per run — avoids the org+name UNIQUE constraint on reruns)
+  → asserts the row lists with `WWdryrun_` → selects + assigns the agent → asserts the
+  member appears in the queue's labeled roster → screenshots to
+  `docs/runs/2026-07-15-phase-3-and-ui/step-12-queues.png` (viewed: queues with dry-run
+  SIDs in mono readout, `longest-idle` badges, assigned member badge, create card).
+- Verified: `npx playwright test` → 5/5 pass (all specs, clean run). Full gate exits 0
+  (64/64 vitest tests, typecheck, lint, build).
+- Commit `3a96f4a`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
