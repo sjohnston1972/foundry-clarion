@@ -1,0 +1,86 @@
+Run: Pages → Workers migration + Durable Object proof
+Ended: 2026-07-15T14:30Z (blocked, not completed)
+Archive: docs/runs/2026-07-15-workers-migration/{PLAN.md,PROGRESS.md}
+
+## What this run accomplished (Steps 1–5, all committed and green)
+
+The Pages → Workers migration itself is DONE and verified:
+
+- Step 1 (93f8f38): baseline reproduced — Pages Functions bundler drops the
+  `ClarionRealtime` DO export, `wrangler pages dev` refuses to start.
+- Step 2 (07f4694): added `server/worker.ts` as a Workers-style entrypoint
+  (`export default createApp()` + `export { ClarionRealtime }`), alongside
+  the old Pages entrypoint, proven to change no behaviour.
+- Step 3 (fad0627): `wrangler.jsonc` switched to Workers + static assets
+  (`main`, `assets` with `run_worker_first: ["/api/*"]`). `wrangler dev`
+  starts clean — the DO is exported natively for the first time.
+- Step 4 (b949495): npm scripts — `dev:worker` / `deploy` replace
+  `pages:dev` / `pages:deploy`.
+- Step 5 (c12dc95): dead `functions/api/[[route]].ts` deleted.
+
+Full local gate (vitest 35/35, typecheck, lint, build) is green on every
+step. `npm run dev:worker` starts cleanly with the `durable_objects`
+binding present and no bundler error — the original blocker this run
+existed to kill is gone.
+
+Step 6 (the live proof) got two of three checks live and green under
+`wrangler dev`:
+- `GET /api/health` → 200 healthy
+- `GET /api/auth-status` → 200, `authenticated:false`, documented shape
+
+Both confirm `/api/*` correctly reaches the Worker and the SPA `assets`
+fallback isn't swallowing API routes — i.e. the migration mechanics are
+proven correct.
+
+## What's blocked
+
+The third Step 6 proof point — a live WebSocket handshake to
+`/api/realtime/socket` returning HTTP 101 — cannot be obtained as
+PLAN.md specified. `/socket` is gated by `requireClarionRole('agent')`
+(added in Phase 2, commit `04b863e`, predates this run), which requires
+a resolved Clarion role regardless of `AUTH_ENFORCE`. Resolving a role
+requires a session that passed `verifyFoundrySession`, which only
+accepts JWTs signed by AuthPak's real private key (remote JWKS, no local
+override in the vendored `@foundry/auth` package). There is no AuthPak
+key available locally, and CLAUDE.md §12 forbids minting our own
+AuthPak-equivalent tokens — so there is no honest way to pass the gate
+under local `wrangler dev`.
+
+This is a plan/codebase mismatch, not a defect in the migration. I did
+not revert Steps 1–5: they're independently correct and verified, and
+reverting the hosting migration would not unblock the WebSocket proof
+either way (the role gate would reject the same request under Pages too).
+
+Full root-cause writeup, evidence, and options are in the archived
+PROGRESS.md's Step 6 log entry and Blockers section:
+docs/runs/2026-07-15-workers-migration/PROGRESS.md
+
+Steps 6 (WebSocket proof) through 10 (capstone/close-out) were not
+attempted — they all sit downstream of this decision.
+
+## Recommended starting point for the next run
+
+This needs a decision from Steven before it can be replanned, not more
+autonomous exploration:
+
+1. How should the live-101 DO proof be obtained without a local AuthPak
+   signing capability? Three options are sketched in PROGRESS.md's Step 6
+   entry: (a) a local-dev-only bypass of `requireClarionRole` on
+   `/socket`, explicitly scoped and reverted after the proof; (b) a local
+   JWKS override path in `@foundry/auth`/`server/app.ts` for dev sessions
+   (bigger, may need an AuthPak-side change request); (c) redefine Step
+   6's bar to accept the 403 as proof the DO/route wiring is correct up
+   to the auth boundary, and defer the true 101 proof to a session with a
+   real AuthPak cookie (e.g. once Steven can log in through a browser
+   against a locally-run stack).
+2. Once that's decided, a new PLAN.md can pick up at Step 6 with a
+   corrected verification method — Steps 1–5's work does not need to be
+   redone.
+3. Steps 7–10 (DO socket identity/cleanup, cross-repo doc scaffolding,
+   CLAUDE.md stack-decision writeup, green capstone + archive) are all
+   still pending and unaffected by this blocker except for their
+   sequencing after Step 6.
+
+Branch `feat/realtime-workers-migration` has all Steps 1–5 commits plus
+this archive/DONE commit. Not pushed. `main` is still 53 commits ahead of
+`origin/main`, unpushed — Steven owns that (CLAUDE.md §4).
