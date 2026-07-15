@@ -88,3 +88,5 @@ through the auth gate (`requireClarionRole('agent')`, dev-owner bootstraps to `a
 the org's live `ClarionRealtime` Durable Object, answering **101** with a
 `Sec-WebSocket-Accept` and immediately pushing the presence snapshot frame. Per the Step 2
 rail, this live handshake stands as the run's DO proof.
+
+Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
