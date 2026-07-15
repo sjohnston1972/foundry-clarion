@@ -44,6 +44,21 @@ Workers-with-static-assets, proven by a live WebSocket handshake (HTTP 101) unde
 - 2026-07-15T21:00Z — Step 2 done: server/worker.ts exports app + ClarionRealtime. vitest 35/35 PASS, typecheck clean. commit abc1234
 -->
 
+- 2026-07-15T13:00Z — Step 1 done (baseline + reproduce, no code changed). Full local gate:
+  `npm run d1:migrate:local` → "No migrations to apply!"; `npx vitest run` → 14 files / 35 tests
+  PASS; `npm run typecheck:server` → clean (no output); `npm run lint` (`npx oxlint`) → clean (no
+  output); `npm run build` → `tsc -b && vite build` succeeded, `dist/` emitted. All five exit 0.
+  Then ran `npm run pages:dev` and captured the DO bundler error verbatim:
+
+  ```
+  X [ERROR] Your Worker depends on the following Durable Objects, which are not exported in your entrypoint file: ClarionRealtime.
+
+    You should export these objects from your entrypoint, .wrangler\tmp\pages-hsJUlh\functionsWorker-0.7154761055656534.mjs.
+  ```
+
+  Matches PLAN.md Step 1's expected text exactly. Confirms the blocker this run exists to kill.
+  Committed (evidence only, no code changes).
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, end the run, and stop. -->
