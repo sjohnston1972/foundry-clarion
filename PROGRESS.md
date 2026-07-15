@@ -92,6 +92,15 @@ Workers-with-static-assets, proven by a live WebSocket handshake (HTTP 101) unde
   those three paths returned nothing, and `.github/workflows/ci.yml` does not reference either
   script. commit b949495.
 
+- 2026-07-15T14:00Z — Step 5 done: deleted `functions/api/[[route]].ts`; the `functions/` tree
+  was then empty and is gone (`git rm -r functions`; confirmed no `functions/` dir remains).
+  `main: "server/worker.ts"` (set in Step 3) made this file unreachable dead code. Full gate:
+  `npx vitest run` → 14 files / 35 tests PASS; `npm run typecheck:server` → clean; `npx oxlint`
+  → clean; `npm run build` → exit 0, `dist/` emitted. `npm run dev:worker` started cleanly under
+  a 15s timeout, "Ready on http://127.0.0.1:8787", same bindings table as Steps 3–4. (CLAUDE.md
+  still references `functions/api/[[route]].ts` in its §8 tech-stack description — that's a
+  Step 9 doc fix, not this step's job.) commit c12dc95.
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, end the run, and stop. -->
