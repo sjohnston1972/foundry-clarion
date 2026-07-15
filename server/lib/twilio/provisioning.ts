@@ -40,6 +40,32 @@ export async function createWorker(
   return { workerSid: json.sid, dryRun: false }
 }
 
+/** Create a TaskRouter Workflow for a queue. DRY_RUN => deterministic fake SID, no network. */
+export async function createWorkflow(
+  env: Bindings,
+  args: { orgId: string; friendlyName: string; configuration: Record<string, unknown> },
+): Promise<{ workflowSid: string; dryRun: boolean }> {
+  if (isDryRun(env)) {
+    return { workflowSid: `WWdryrun_${crypto.randomUUID().replace(/-/g, '')}`, dryRun: true }
+  }
+  // LIVE PATH — only reached after Steven flips TWILIO_DRY_RUN=false in-session.
+  const auth = authHeader(env)
+  const workspaceSid = env.TWILIO_TASKROUTER_WORKSPACE_SID
+  if (!workspaceSid) throw new Error('Missing TWILIO_TASKROUTER_WORKSPACE_SID for live workflow creation')
+  const body = new URLSearchParams({
+    FriendlyName: args.friendlyName,
+    Configuration: JSON.stringify({ ...args.configuration, organization_id: args.orgId }),
+  })
+  const res = await fetch(`${TASKROUTER_BASE}/Workspaces/${workspaceSid}/Workflows`, {
+    method: 'POST',
+    headers: { Authorization: auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  if (!res.ok) throw new Error(`TaskRouter createWorkflow failed: ${res.status} ${await res.text()}`)
+  const json = (await res.json()) as { sid: string }
+  return { workflowSid: json.sid, dryRun: false }
+}
+
 /** Ensure the single shared TaskRouter Workspace exists. DRY_RUN => returns configured/fake sid. */
 export async function ensureTaskRouterWorkspace(env: Bindings): Promise<{ workspaceSid: string; dryRun: boolean }> {
   if (isDryRun(env)) {

@@ -52,6 +52,20 @@ export async function listQueues(db: D1Database, orgId: string): Promise<Queue[]
   return results.map(toQueue)
 }
 
+export async function updateQueue(
+  db: D1Database,
+  orgId: string,
+  id: string,
+  patch: { name?: string; strategy?: string },
+): Promise<void> {
+  if (patch.name !== undefined) {
+    await db.prepare(`UPDATE cc_queues SET name = ? WHERE organization_id = ? AND id = ?`).bind(patch.name, orgId, id).run()
+  }
+  if (patch.strategy !== undefined) {
+    await db.prepare(`UPDATE cc_queues SET strategy = ? WHERE organization_id = ? AND id = ?`).bind(patch.strategy, orgId, id).run()
+  }
+}
+
 export async function deleteQueue(db: D1Database, orgId: string, id: string): Promise<void> {
   await db.prepare(`DELETE FROM cc_queues WHERE organization_id = ? AND id = ?`).bind(orgId, id).run()
 }
