@@ -8,6 +8,7 @@ import { agents } from './routes/agents'
 import { token } from './routes/token'
 import { realtime } from './routes/realtime'
 import { queues } from './routes/queues'
+import { voice } from './routes/voice'
 import { dev } from './routes/dev'
 import { touchOrgDirectory } from './db/directory'
 import { resolveClarionRole } from './lib/auth'
@@ -29,6 +30,10 @@ export function createApp() {
     return next()
   })
   app.route('/dev', dev)
+
+  // Twilio-called webhooks, not browser-called: outside the AuthPak gate entirely.
+  // Trust is established per-request via X-Twilio-Signature (server/lib/twilio/signature.ts).
+  app.route('/voice', voice)
 
   // Public routing probe for the SPA gate (never 401s).
   app.get('/auth-status', async (c) => {
