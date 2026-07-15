@@ -10,8 +10,8 @@
     "test:watch": "vitest",
     "lint": "oxlint",
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
-    "pages:dev": "wrangler pages dev",
-    "pages:deploy": "npm run build && wrangler pages deploy",
+    "dev:worker": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
     "d1:migrate:local": "wrangler d1 migrations apply foundry-clarion-db --local",
     "d1:migrate:remote": "wrangler d1 migrations apply foundry-clarion-db --remote"
   },
