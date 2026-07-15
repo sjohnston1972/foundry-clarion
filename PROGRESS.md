@@ -381,3 +381,32 @@ authored.
   (64/64 vitest tests, typecheck, lint, build).
 - Commit `3a96f4a`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 23:00 — Step 13 done: Softphone page (live presence over the DO socket)
+
+- `src/pages/Softphone.tsx` (new): replaces the placeholder `SoftphonePanel` — `src/App.tsx`
+  is now purely routes. Behaviour preserved from `src/lib/twilio-voice.ts` (register via
+  `/api/token/voice`, status POST to `/api/agents/status`, presence socket), rebuilt on
+  vendored primitives with all four register states surfaced for real: registering/
+  registered (primary `Button`, accent `Badge` in the card head), **unavailable** (the
+  `token 503` path renders an `EmptyState` explaining Twilio API keys are pending —
+  presence still works), error (danger `Button` retry). Presence card renders the live
+  roster (`aria-label`ed list, accent badge for `available`). Routed at both `/` (nav home)
+  and `/softphone` (the plan's verify URL).
+- **Real bug found by driving the UI** (second one this arc): `vite.config.ts`'s `/api`
+  proxy lacked `ws: true`, so WebSocket upgrades to `/api/realtime/socket` died at the Vite
+  origin — the presence roster could never update in dev through the SPA (Steps 3/4 had
+  connected straight to :8787, bypassing Vite, so this was invisible until now). Fixed.
+- Seed: added `org-step13` + `cara.agent@example.com` (session email must match an enabled
+  `cc_agents` row for `/api/agents/status` to accept the change); re-applied.
+- `test/e2e/softphone-page.spec.ts`: signs in AS the agent → enables self via API
+  (`[201,409]`) → `/softphone` → sets status `available` via the UI select and asserts the
+  roster row appears with the badge — a full round-trip (UI → POST → DO broadcast → our
+  socket → DOM). Screenshots, then sets `offline` and asserts the row disappears (proves a
+  second live update AND leaves the org-step13 DO roster empty, so reruns start clean).
+  Screenshot viewed: register button, status Available, roster row
+  `cara.agent@example.com · available`.
+- Verified: `npx playwright test` → 6/6 pass. Full gate exits 0 (64/64 vitest tests,
+  typecheck, lint, build).
+- Commit `8f11caa`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
