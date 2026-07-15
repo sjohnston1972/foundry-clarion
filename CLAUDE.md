@@ -200,7 +200,9 @@ The browser gets short-lived Twilio Access Tokens minted by Clarion.
 Mirror Workspace exactly:
 
 - **Language:** TypeScript (`~6.0`)
-- **Backend:** **Hono** as **Pages Functions** — `functions/api/[[route]].ts` mounts a `server/` app
+- **Backend:** **Hono**, served from Cloudflare **Workers with static assets** (not Pages
+  Functions) — `server/worker.ts` is the Worker entrypoint, mounts the `server/` app, and
+  also exports the `ClarionRealtime` Durable Object class (`wrangler.jsonc` `main`).
 - **Frontend:** **React 19 + Vite 8 + Tailwind v4**, `react-router-dom` v7, `@tanstack/react-query` v5
 - **DB:** Cloudflare D1 — **own** `foundry-clarion-db` + read-only bind of `skills-foundry-db`
 - **Object storage:** Cloudflare R2 (recordings, transcripts)
@@ -266,8 +268,15 @@ Never commit `.env`. Confirm `.gitignore` before first commit.
 - [x] **Explicit "enable as agent"** step (creates the Worker on demand; makes billing visible). (2026-07-13)
 - [x] **Real-time = Durable Object from the start** (per-org hub). (2026-07-13)
 - [x] **Outbound scope: v1 = inbound + click-to-call**, no predictive dialer. (2026-07-13)
+- [x] **Local dev session without live AuthPak**: a bounded `DEV_AUTH` exception (local
+  `wrangler dev` + tests only). See §12. (2026-07-15)
+- [x] **UI look and feel**: vendored snapshot of Workspace's design tokens + `ui.tsx`, own
+  `AppShell`, drift test as the guard — not a shared package (Clarion is read-only on
+  `skills-foundry`). See §14. (2026-07-15)
 - [ ] Recording consent / prompts — jurisdiction rules are a product decision (Steven owns). Code exposes a per-org toggle + per-number announcement; defaults TBD.
 - [ ] Mint a **`clarion` AuthPak service client** if/when server-to-server AuthPak calls are needed (change request). Not needed for v0.1.
+- [ ] Extract a shared `@foundry/ui` package once Workspace opts in — until then the design
+  system stays a vendored snapshot guarded by a drift test (§14).
 
 Log answers back into this file as they land. This file is living.
 
@@ -284,6 +293,24 @@ Log answers back into this file as they land. This file is living.
 - Do not call the Twilio account-mutating APIs (buy number, create workspace) without explicit in-session confirmation from Steven.
 - Do not silently invent APIs you wish the sibling repos had. Write a change request and stop.
 
+**The `DEV_AUTH` exception** (2026-07-15, Phase 3 + UI run — narrows, does not repeal, "Do
+not mint your own tokens for anything AuthPak already covers" above): a local-only escape
+hatch makes the app drivable without a live AuthPak session, bounded by five rules a future
+session must not relitigate or quietly widen:
+
+- `DEV_AUTH` defaults to **off**. Absent or any value but `"true"` ⇒ the dev key resolver
+  is never constructed and `verifyFoundrySession` is called exactly as it is today.
+- It is honoured **only** under local `wrangler dev` and in tests. It is never set in
+  `wrangler.jsonc` production `vars`, never in CI, never in a deployed environment.
+- A test asserts that with `DEV_AUTH` unset, a dev-signed token is **rejected**.
+- The dev keypair is generated locally and is not an AuthPak key. It cannot produce a
+  token any real AuthPak verifier would accept.
+- Rail: if `DEV_AUTH` would need to be on anywhere but local `wrangler dev`, the run stops.
+
+Implementation: `server/lib/dev-auth.ts` (in-memory RS256 keypair, issuer
+`https://dev.local/authpak`), `server/routes/dev.ts` (`POST /api/dev/session`, 404s unless
+`DEV_AUTH === 'true'`). Full rationale: `docs/superpowers/specs/2026-07-15-phase-3-and-ui-design.md` §3.
+
 ---
 
 ## 13. Starting a session — checklist for the agent
@@ -297,3 +324,30 @@ Every new Claude Code session in this repo, in order:
 5. Create/switch to a feature branch.
 6. Work.
 7. Before ending: update this file with anything learned that a future session would need.
+
+---
+
+## 14. Design system
+
+**Clarion takes its look and feel directly from Foundry Workspace** — the two apps are
+tightly coupled and must not visually drift (Steven, 2026-07-15). Mechanism: a **vendored
+snapshot**, not a shared package (Clarion is read-only on `skills-foundry`, so a real
+`@foundry/ui` package is out of scope until Workspace opts in):
+
+- `src/index.css`'s `@theme` block and `src/components/ui.tsx` (`Card`, `CardHead`,
+  `Button`, `Badge`, `Stat`, `Spinner`, `EmptyState`, `Loader`, `Skeleton`, `TableSkeleton`,
+  `ErrorState`) are copied **verbatim** from `skills-foundry`, each with a provenance
+  header naming source repo, path, and commit.
+- `src/components/AppShell.tsx` deliberately does **NOT** port — Workspace's version (641
+  lines) is wired into departments, plans, billing, tickets, and a command palette Clarion
+  doesn't have. Clarion builds its own shell mirroring Workspace's *structure* (sidebar nav,
+  header, `Outlet`) on top of the vendored primitives, not a copy of the file.
+- Clarion keeps Workspace's `--accent` CSS-variable indirection but fixes it at `#00a3ff`
+  (one app, no departments to theme per-department).
+- `test/design-drift.test.ts` is the guard: it re-reads the `skills-foundry` sibling and
+  fails when Workspace's copy has moved past the vendored snapshot, so drift is a loud
+  failure instead of a slow rot. It skips cleanly when the sibling isn't on disk (CI-safe).
+- When Workspace's design system changes, re-vendor deliberately (new provenance commit),
+  don't silently hand-edit the vendored files to "fix" a failing drift test.
+
+Full rationale: `docs/superpowers/specs/2026-07-15-phase-3-and-ui-design.md` §4.
