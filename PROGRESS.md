@@ -63,3 +63,28 @@ this run, and Step 4 will use its `test/presence.test.ts` fallback.
   pool-workers release that tolerates EBUSY / creates the DO persist dir; revisit when
   vitest is upgraded to v4 (unlocks pool-workers 0.18+).
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 16:22 — Step 3 done: live 101 under `wrangler dev` (the DO proof)
+
+No application code changed. `DEV_AUTH=true` supplied via gitignored `.dev.vars` (wrangler
+does not inject arbitrary process env into worker bindings; `.dev.vars` is the sanctioned
+local-only channel, never committed). `wrangler dev` on `http://127.0.0.1:8787`; client was
+a throwaway Node script (`node:http` for the raw upgrade so status/headers/frame are shown
+explicitly; deleted after the run, not committed). Server started and stopped cleanly.
+
+Verbatim client output:
+
+```
+GET /api/health -> 200 {"success":true,"status":"healthy","database":"connected","timestamp":"2026-07-15T15:21:03.160Z"}
+POST /api/dev/session -> 200 (cookie: fnd_session=eyJhbGciOiJSUzI1Ni...)
+GET /api/auth-status -> 200 {"success":true,"data":{"authenticated":true,"hasOrg":true,"email":"dev@example.com","orgId":"org-dev","orgSlug":"dev","orgRole":"owner","clarionRole":"admin","disabled":false}}
+WS handshake -> 101
+Sec-WebSocket-Accept: khW6RE2eNOgjlEbnrVHsYddFWbI=
+first frame (opcode 1): {"type":"presence","agents":[]}
+```
+
+This is the proof the previous run could not get: a real browser-path WebSocket handshake
+through the auth gate (`requireClarionRole('agent')`, dev-owner bootstraps to `admin`) into
+the org's live `ClarionRealtime` Durable Object, answering **101** with a
+`Sec-WebSocket-Accept` and immediately pushing the presence snapshot frame. Per the Step 2
+rail, this live handshake stands as the run's DO proof.
