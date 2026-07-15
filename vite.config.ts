@@ -21,6 +21,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8787',
         changeOrigin: true,
+        // Forward WebSocket upgrades too (the presence socket at
+        // /api/realtime/socket) — without this the socket dies at the proxy.
+        ws: true,
       },
     },
   },
