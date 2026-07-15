@@ -33,3 +33,33 @@ Append one timestamped entry per verified step below. Never edit history; append
   without `workflow` scope"). All work is committed locally; will retry push on later
   steps. Fix for Steven: re-auth with `gh auth refresh -s workflow` (or push once from a
   credential that has the scope).
+
+## 2026-07-15 16:18 — Step 2 hit its rail: pool-workers cannot run on this machine
+
+Applied the Step 2 rail (do not fight it): the workers project and test were written, the
+real `ClarionRealtime` DO **was** exercised in workerd, but the tooling cannot go green on
+Windows, so the attempt was reverted. Step 3's live handshake stands as the DO proof for
+this run, and Step 4 will use its `test/presence.test.ts` fallback.
+
+### Blockers (tooling, Windows-specific — for a future run or Linux CI)
+
+- `@cloudflare/vitest-pool-workers` **installed compatibly**: `0.12.x` is the last line
+  whose peer range (`vitest 2.0.x - 3.2.x`) matches our `vitest@3.2.x`; `0.13.0+` requires
+  `vitest ^4.1.0`. Installed `0.12.21` cleanly, no `--force`.
+- With default per-test isolated storage: all app-level assertions **passed** on first run
+  (real DO: WebSocket 101 + snapshot frame, `/presence` fan-out, persistence via fresh
+  stub), but the harness then fails popping the storage stack — Windows cannot unlink the
+  DO's still-open SQLite file (`EBUSY ... unlink ...\do\...ClarionRealtime\<id>.sqlite`;
+  the pool's `popStackedStorage` has no EBUSY tolerance, `runInDurableObject`-style
+  `abortAllDurableObjects` runs but the handle release loses the race). Suite exits 1.
+- With `isolatedStorage: false`: every DO storage open fails `SQLITE_CANTOPEN` — nothing
+  creates the DO persist dir under miniflare's per-run temp path in non-isolated mode
+  (in isolated mode the stack-push `mkdir` creates it as a side effect). Temp path is
+  `os.tmpdir()/miniflare-<random16>` per instance, so it cannot be pre-created.
+- Reverted: `vitest.config.ts` back to single node project (with a pointer comment),
+  `test/workers/` deleted, dependency uninstalled. Gate re-verified green after revert
+  (38/38 tests, typecheck, lint, build).
+- Recommendation: retry on Linux CI (where unlink-while-open is legal) or after a
+  pool-workers release that tolerates EBUSY / creates the DO persist dir; revisit when
+  vitest is upgraded to v4 (unlocks pool-workers 0.18+).
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
