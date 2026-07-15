@@ -410,3 +410,29 @@ authored.
   typecheck, lint, build).
 - Commit `8f11caa`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 23:05 — Step 14 done: Wallboard scaffold (live presence, Stat + Card)
+
+- `src/pages/Wallboard.tsx` (new, routed at `/wallboard` — the last Step 10 stub is gone,
+  `src/App.tsx` is now routes only): subscribes to the org DO stream
+  (`openPresenceSocket`) and renders live presence with vendored `Stat` + `Card` — four
+  readouts (online/available/on-call/wrap-up, online accented) and a presence-tile grid
+  (identity + status badge on `bg-raised` tiles). **Scaffold only**, exactly the approved
+  scope: no monitor/whisper/barge (Phase 5), no call metrics — the Call volume panel
+  renders an `EmptyState` saying live call events land in a later phase.
+- Seed: added `org-step14` + `dana.agent@example.com`; re-applied.
+- `test/e2e/wallboard-page.spec.ts`: signs in as the agent, enables self (`[201,409]`),
+  loads `/wallboard`, then changes status **via the API** (per the plan's verify wording)
+  while the page is open — the tile can only appear through the live WebSocket, no reload.
+  Asserts the tile shows `available`, screenshots to
+  `docs/runs/2026-07-15-phase-3-and-ui/step-14-wallboard.png` (viewed: Stat row
+  Online 1 / Available 1 / On call 0 / Wrap-up 0, dana's tile with accent badge, Call
+  volume EmptyState), then sets `offline` and asserts the tile leaves — cleaning the
+  org-step14 DO roster for reruns.
+- Housekeeping: full-suite Playwright runs re-screenshot earlier steps' pages; restored the
+  committed step-10/12/13 PNGs so each step's archived proof stays as captured at that
+  step (only step-14's screenshot is new in this commit).
+- Verified: `npx playwright test` → 7/7 pass. Full gate exits 0 (64/64 vitest tests,
+  typecheck, lint, build).
+- Commit `cf52d90`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
