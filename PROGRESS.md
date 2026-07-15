@@ -225,3 +225,57 @@ PASS: closed identity removed from roster; survivor untouched
   typecheck, lint, build).
 - Commit `f1d3913`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 18:13 — Step 9 done: LINCHPIN — design system ported, gate green
+
+Read spec §4 in full first, per the step's instruction. Confirmed the sibling before
+touching anything: `git -C ../skills-foundry rev-parse HEAD` → `29ed077...`, and
+`git log -1 -- src/index.css` / `src/components/ui.tsx` → `35e268c` / `673b50c` — all three
+match the plan's stated baselines exactly, so no drift had occurred since the design was
+authored.
+
+- `npm i clsx tailwind-merge lucide-react`; `npm i -D @playwright/test && npx playwright
+  install chromium` — installed cleanly, chromium launches (verified with a standalone
+  `chromium.launch()` smoke check before writing any tests).
+- `src/lib/utils.ts`: `cn` copied verbatim (6 lines) with a one-line provenance comment.
+- `src/index.css`: replaced the `@theme` block with Workspace's complete one (verbatim,
+  including its "set at runtime per active department" comment — left unchanged so the
+  block stays byte-for-byte identical to the source, which is what the drift test checks);
+  added the `:root` accent vars (`--accent`/`--accent-soft` fixed at `#00a3ff`/`#e6f5ff`,
+  not runtime department-switched — Clarion has one app), `.tabular`, and the three
+  `::-webkit-scrollbar*` rules, all verbatim. Deliberately did **not** vendor Workspace's
+  `.md` (chat markdown) or `.react-flow__node` (org chart) rules — Clarion has neither
+  feature, and the spec's missing-tokens list didn't call for them.
+- `src/components/ui.tsx`: copied verbatim (`Card`, `CardHead`, `Button`, `Badge`, `Stat`,
+  `Spinner`, `EmptyState`, `Loader`, `Skeleton`, `TableSkeleton`, `ErrorState`) behind a
+  provenance header + a `// --- vendored verbatim below ---` sentinel the drift test splits
+  on, so the header itself never has to byte-match the sibling.
+- `test/design-drift.test.ts` (5 tests, `it.skip` when the sibling is absent): extracts and
+  compares the `@theme` block, the `:root` block, `.tabular` + the scrollbar rules, the full
+  `ui.tsx` body (post-sentinel), and `utils.ts` (post-provenance-comment) against the live
+  sibling content — normalizing CRLF/LF first (the sibling checkout is CRLF; that's a
+  checkout artifact, not design drift). All 5 ran for real (not skipped) and passed.
+- **Playwright proof** (`playwright.config.ts` + `test/e2e/`): a dev-only fixture
+  (`design-tokens.html` + `-main.tsx`, never referenced by `src/main.tsx`/`index.html`, not
+  in `vite build` output) mounts vendored `Card`+`CardHead`+`Button`(both variants)+`Badge`.
+  The spec asserts visibility of each, then reads the Primary button's **computed**
+  `background-color` and asserts it's exactly `rgb(0, 163, 255)` (`#00a3ff`) — proof the
+  actual `--color-accent` token value flows through the Tailwind v4 pipeline, not just that
+  a class name applied. Screenshot saved to
+  `docs/runs/2026-07-15-phase-3-and-ui/step-9-tokens.png` (viewed — rounded card with the
+  vendored shadow/radius, Space Grotesk heading, correct accent blue, light-blue accent
+  badge, gray neutral badge — matches Workspace's look exactly).
+- **One hiccup, not a blocker**: Playwright's `webServer` health check against
+  `http://127.0.0.1:5173` timed out — `127.0.0.1` doesn't resolve to the Vite dev server in
+  this environment/sandbox, only the `localhost` hostname does (confirmed directly: a
+  `fetch('http://127.0.0.1:5173/')` failed, `fetch('http://localhost:5173/')` returned 200).
+  Switched `playwright.config.ts`'s `baseURL`/`webServer.url` to `localhost`; no other
+  change needed. Also fixed `ReferenceError: __dirname is not defined` in the ESM spec file
+  by using `import.meta.dirname` instead.
+- Added `/test-results/` and `/playwright-report/` to `.gitignore` (Playwright run
+  artifacts; the screenshot we intentionally keep lives under `docs/runs/`, not there).
+- Verified: `npx vitest run test/design-drift.test.ts` → 5/5 pass, not skipped.
+  `npx playwright test` → 1/1 pass. Full gate exits 0 (64/64 vitest tests, typecheck, lint,
+  build).
+- Commit `a6fc2a8`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
