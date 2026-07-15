@@ -319,3 +319,40 @@ authored.
   `lucide-react` entering the bundle graph via the new shell).
 - Commit `1d690f0`.
 - Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
+
+## 2026-07-15 18:38 — Step 11 done: Agents page (list, candidates, enable-as-agent)
+
+- `src/pages/Agents.tsx` (new, routed at `/agents` replacing the Step 10 stub): two cards on
+  the vendored primitives only (`Card`, `CardHead`, `Button`, `Badge`, `EmptyState`,
+  `TableSkeleton`, `ErrorState` — no bespoke styling) — enabled agents (email, `WKdryrun_`
+  worker SID in a `.tabular` readout, status `Badge`) and Workspace candidates with an
+  Enable button. Data via `@tanstack/react-query` (`useQuery` ×2, `useMutation` +
+  invalidation of both keys on success); `QueryClientProvider` added in `src/main.tsx`.
+  Each card sits in a labeled `<section>` so tests can scope queries unambiguously.
+- `src/lib/api.ts` (new): shared `fetchJson` for the `{ success, data }`/`{ error }`
+  envelope. Sets `cache: 'no-store'`.
+- **Real bug found by driving the UI** (the server was verified correct first via a direct
+  fetch sequence against `wrangler dev`): after Enable, React Query's refetch of
+  `/api/agents` could be served the **browser's cached** pre-enable response — API routes
+  send no `Cache-Control` header. Symptom: candidate disappears, agent list stays "No
+  agents yet". Fix: `cache: 'no-store'` in `fetchJson`.
+- **Test-side bug too**: the spec's idempotence branch used `locator.count()`, which does
+  NOT auto-wait — against a still-loading page (skeletons) it returned 0 and silently
+  skipped the Enable click. Fixed by settling first (`candidateRow.or(agentRow).first()`
+  visible) before branching.
+- `test/e2e/fixtures/workspace-seed.sql` (new): local-only fixture giving the local
+  `WORKSPACE_DB` **emulation** the minimal shape `server/db/workspace.ts` queries
+  (departments/resources/sub_skills/resource_sub_skills) plus one candidate for
+  `org-step11`. Applied via `wrangler d1 execute skills-foundry-db --local --file=...` —
+  never touches the real skills-foundry-db or the sibling repo. (First run surfaced that
+  `getResourceSkills` also needs the skills tables — `no such table: resource_sub_skills` —
+  so the fixture creates those empty.)
+- `test/e2e/agents-page.spec.ts`: DEV_AUTH sign-in → `/agents` → seeded candidate visible →
+  Enable → candidate leaves Candidates, appears under Agents as `offline` → screenshot to
+  `docs/runs/2026-07-15-phase-3-and-ui/step-11-agents.png` (viewed: agent row with dry-run
+  SID readout + offline badge, empty candidates card). Idempotent on rerun (verified: ran
+  twice, second run takes the already-enabled path).
+- Verified: `npx playwright test` → 4/4 pass on a clean DB (enable flow executed for real).
+  Full gate exits 0 (64/64 vitest tests, typecheck, lint, build).
+- Commit `28cfbef`.
+- Push still blocked (`workflow` scope, see Step 1 entry); commits are local.
