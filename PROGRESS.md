@@ -66,6 +66,21 @@ Workers-with-static-assets, proven by a live WebSocket handshake (HTTP 101) unde
   (`ClarionRealtime` not exported in `functionsWorker-*.mjs`), confirming nothing else moved.
   commit 07f4694.
 
+- 2026-07-15T13:30Z — Step 3 done: `wrangler.jsonc` switched to Workers + static assets.
+  Removed `pages_build_output_dir`; added `"main": "server/worker.ts"` and an `assets` block
+  (`directory: "./dist"`, `not_found_handling: "single-page-application"`,
+  `run_worker_first: ["/api/*"]`) so `/api/*` always reaches the Worker before the SPA fallback
+  can swallow it (to be proven live in Step 6). `d1_databases` (including the `REPLACE_*`
+  placeholders), `durable_objects`, `migrations`, `compatibility_date`, `compatibility_flags`,
+  and `vars` left byte-for-byte untouched — confirmed via `git diff wrangler.jsonc`.
+  `npm run typecheck:server` → clean; `npx vitest run` → 14 files / 35 tests PASS. Config
+  validation: `wrangler dev --dry-run` is not a supported flag combo in wrangler 4.104.0
+  ("Unknown arguments: dry-run, dryRun"), so validated with `npx wrangler dev` under a 15s
+  timeout instead — it started cleanly with `Ready on http://127.0.0.1:8787`, no config error,
+  no missing-DO-export error, and correctly showed `env.REALTIME (ClarionRealtime)` as a local
+  Durable Object binding (`durable_objects` no longer needs `functions/api/[[route]].ts` to
+  re-export it). commit fad0627.
+
 ## Blockers
 
 <!-- If the plan is ambiguous or a step can't be verified, write the question here, end the run, and stop. -->
