@@ -103,3 +103,29 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx vitest run test/voice-route.test.ts` → 11/11. Gate exits 0 (80/80 tests,
   typecheck, lint, build). `git grep -n "TWILIO_DRY_RUN" wrangler.jsonc` → still `"true"`.
 - Commit `5170882`, pushed to origin (`daca11b..5170882`).
+
+## 2026-07-16 12:38 — Step 5 done: LINCHPIN — `recordingStatusCallback` → R2, green first try
+
+- `server/lib/twilio/provisioning.ts`: `fetchRecordingMedia` verbatim from the plan —
+  dry-run returns synthetic bytes (`dryrun-audio:<sid>`) with no network; **the R2 write
+  stays real**, so capture is genuinely exercised rather than mocked away. Live path
+  (authenticated GET of `RecordingUrl`) written but unreachable.
+- `server/routes/voice.ts` `POST /recording` verbatim from the plan: signature-validated
+  first, outside the AuthPak gate like its siblings; `orgId` required; non-`completed`
+  statuses ⇒ 204 no-op; unknown `CallSid` ⇒ 404; on `completed` ⇒ media fetched, put at
+  `orgs/{orgId}/calls/{callSid}/{recordingSid}.mp3`, `cc_recordings` row inserted
+  (metadata in D1, bytes in R2 only), 204. The trailing comment marks where Step 7's
+  `waitUntil` hand-off lands.
+- `test/voice-route.test.ts`: added the plan's `fakeR2` beside `fakeDb` (store exposed),
+  gave `fakeDb` a `cc_recordings` INSERT branch + a typed `recordingsStore` handle, and
+  `env()` now carries a `RECORDINGS` bucket (per-test injectable). Four new tests, all four
+  required cases: missing/invalid signature ⇒ 403; non-`completed` ⇒ 204 with **nothing**
+  written (empty R2 store, no row); `completed` ⇒ 204 with exactly the key
+  `orgs/o1/calls/CAdryrun_1/REdryrun_x.mp3` in R2, decoded bytes `dryrun-audio:REdryrun_x`,
+  and a `cc_recordings` row (`duration_s` 42, `transcript_status` 'pending'); unknown
+  `CallSid` ⇒ 404. The `cc_calls` row is seeded through the real status webhook on the same
+  env, not injected.
+- Verified: `npx vitest run test/voice-route.test.ts` → 15/15 **on the first attempt** —
+  the stop-the-run rail was never approached. Gate exits 0 (84/84 tests, typecheck, lint,
+  build).
+- Commit `580f224`, pushed to origin (`53703ef..580f224`).
