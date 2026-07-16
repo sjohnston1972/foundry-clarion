@@ -129,3 +129,21 @@ Append one timestamped entry per completed step below. Do not rewrite history.
   the stop-the-run rail was never approached. Gate exits 0 (84/84 tests, typecheck, lint,
   build).
 - Commit `580f224`, pushed to origin (`53703ef..580f224`).
+
+## 2026-07-16 12:41 — Step 6 done: `transcribeAudio` behind `AI_DRY_RUN`
+
+- `server/lib/ai/transcribe.ts` (verbatim from the plan): `Transcript`, `isAiDryRun`
+  (anything but the exact string `'false'` is dry — same posture as `isDryRun`), and
+  `transcribeAudio` — stub transcript under the rail; the live
+  `env.AI.run('@cf/openai/whisper', { audio: [...] })` path written but unreachable.
+  Mirrors the provisioning dry-run shape; no second pattern invented.
+- `test/transcribe.test.ts` (3 tests): the fake `AI`'s `run` **throws if invoked** — the
+  cost-rail assertion the plan requires. `AI_DRY_RUN` unset ⇒ stub returned, `run` proven
+  never called; `'true'` ⇒ same; `'false'` with a benign fake ⇒ the fake's text returned
+  with model `@cf/openai/whisper`, called exactly once, and the audio arrives as the
+  number-array input shape with the right length.
+- Verified: `npx vitest run test/transcribe.test.ts` → 3/3. Gate exits 0 (87/87 tests,
+  typecheck, lint, build). `git grep -n '"AI_DRY_RUN"' wrangler.jsonc` → still `"true"`.
+  **No Workers AI call was made at any point** (the only `AI` objects that exist in tests
+  are fakes; the real binding was never invoked).
+- Commit `d9e97d1`, pushed to origin (`d02a468..d9e97d1`).
