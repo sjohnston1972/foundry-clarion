@@ -12,6 +12,8 @@ import { createApp } from '../server/app'
 import { computeTwilioSignature } from '../server/lib/twilio/signature'
 import { DEFAULT_ANNOUNCEMENT } from '../server/db/settings'
 import { startCallRecording } from '../server/lib/twilio/provisioning'
+import { transcribeRecording } from '../server/lib/ai/transcribe'
+import type { Bindings } from '../server/types'
 
 const AUTH_TOKEN = 'test-auth-token'
 const BASE_URL = 'http://localhost'
@@ -44,6 +46,10 @@ function fakeDb(settings?: FakeSettings): FakeDbHandle {
             }
             if (sql.startsWith('INSERT INTO cc_recordings')) {
               recordings.push({ id: a[0], organization_id: a[1], call_id: a[2], twilio_recording_sid: a[3], r2_key: a[4], duration_s: a[5], transcript_r2_key: null, transcript_status: 'pending' })
+            }
+            if (sql.startsWith('UPDATE cc_recordings')) {
+              const row = recordings.find((r) => r.organization_id === a[2] && r.id === a[3])
+              if (row) { row.transcript_r2_key = a[0]; row.transcript_status = a[1] }
             }
             return {}
           },
@@ -225,9 +231,12 @@ describe('voice recording webhook — LINCHPIN: callback → R2 + cc_recordings'
     expect(res.status).toBe(204)
   }
 
-  const postRecording = async (e: ReturnType<typeof env>, params: Record<string, string>) => {
+  // The /recording handler hands transcription to c.executionCtx.waitUntil, so the
+  // test must supply an ExecutionContext; `waited` collects the handed-off promises.
+  const postRecording = async (e: ReturnType<typeof env>, params: Record<string, string>, waited: Promise<unknown>[] = []) => {
+    const ctx = { waitUntil: (p: Promise<unknown>) => { waited.push(p) }, passThroughOnException: () => {} } as ExecutionContext
     const req = await signedRequest('/api/voice/recording?orgId=o1', params)
-    return createApp().request('/api/voice/recording?orgId=o1', { method: 'POST', ...req }, e)
+    return createApp().request('/api/voice/recording?orgId=o1', { method: 'POST', ...req }, e, ctx)
   }
 
   it('rejects a missing or invalid signature with 403', async () => {
@@ -254,28 +263,88 @@ describe('voice recording webhook — LINCHPIN: callback → R2 + cc_recordings'
     expect((e.DB as FakeDbHandle).recordingsStore.length).toBe(0)
   })
 
-  it('a completed callback writes the audio to R2 and a cc_recordings row', async () => {
+  it('a completed callback writes the audio to R2, a cc_recordings row, and hands off transcription', async () => {
     const r2 = fakeR2()
     const e = env([], undefined, r2.bucket)
     await seedCall(e)
-    const res = await postRecording(e, recParams())
+    const waited: Promise<unknown>[] = []
+    const res = await postRecording(e, recParams(), waited)
     expect(res.status).toBe(204)
 
     const key = 'orgs/o1/calls/CAdryrun_1/REdryrun_x.mp3'
-    expect([...r2.store.keys()]).toEqual([key])
+    expect(r2.store.has(key)).toBe(true)
     expect(new TextDecoder().decode(r2.store.get(key)!)).toBe('dryrun-audio:REdryrun_x')
 
     const rows = (e.DB as FakeDbHandle).recordingsStore
     expect(rows.length).toBe(1)
     expect(rows[0]).toMatchObject({
       organization_id: 'o1', twilio_recording_sid: 'REdryrun_x', r2_key: key, duration_s: 42,
-      transcript_status: 'pending',
     })
+
+    // The 204 was returned BEFORE transcription finished (Twilio never waits on
+    // Whisper); awaiting the handed-off promise completes the pipeline.
+    expect(waited.length).toBe(1)
+    await Promise.all(waited)
+    expect(rows[0]).toMatchObject({
+      transcript_status: 'done',
+      transcript_r2_key: 'orgs/o1/calls/CAdryrun_1/REdryrun_x.transcript.json',
+    })
+    expect(r2.store.has('orgs/o1/calls/CAdryrun_1/REdryrun_x.transcript.json')).toBe(true)
   })
 
   it('an unknown CallSid is a 404', async () => {
     const e = env([])
     const res = await postRecording(e, recParams({ CallSid: 'CA_unknown' }))
     expect(res.status).toBe(404)
+  })
+})
+
+describe('transcribeRecording — R2 -> Whisper -> R2 + cc_recordings, never throws', () => {
+  const KEY = 'orgs/o1/calls/CAdryrun_1/REdryrun_x.mp3'
+
+  // A pending cc_recordings row + its (optional) audio object, assembled directly —
+  // these tests call transcribeRecording itself, per the plan, rather than relying
+  // on executionCtx plumbing.
+  const setup = (over: Record<string, unknown> = {}, withAudio = true) => {
+    const r2 = fakeR2()
+    const db = fakeDb()
+    db.recordingsStore.push({
+      id: 'rec1', organization_id: 'o1', call_id: 'c1', twilio_recording_sid: 'REdryrun_x',
+      r2_key: KEY, duration_s: 42, transcript_r2_key: null, transcript_status: 'pending',
+    })
+    if (withAudio) r2.store.set(KEY, new TextEncoder().encode('dryrun-audio:REdryrun_x').buffer as ArrayBuffer)
+    const e = { DB: db, RECORDINGS: r2.bucket, ...over } as unknown as Bindings
+    return { e, r2, row: db.recordingsStore[0] }
+  }
+
+  it("a successful run => 'done', a .transcript.json key, and the transcript object in R2", async () => {
+    const { e, r2, row } = setup()
+    await transcribeRecording(e, { orgId: 'o1', recordingId: 'rec1', r2Key: KEY })
+    expect(row.transcript_status).toBe('done')
+    expect(String(row.transcript_r2_key)).toBe('orgs/o1/calls/CAdryrun_1/REdryrun_x.transcript.json')
+    const raw = r2.store.get('orgs/o1/calls/CAdryrun_1/REdryrun_x.transcript.json')
+    expect(raw).toBeDefined()
+    // transcribeRecording puts a JSON string; the fake store holds it verbatim.
+    const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw)
+    expect(JSON.parse(text)).toMatchObject({ text: '[dry-run transcript]', dryRun: true })
+  })
+
+  it("a throwing transcribeAudio => 'failed', and the recording row + r2_key survive intact", async () => {
+    // AI_DRY_RUN='false' with a throwing AI exercises the real catch path.
+    const throwingAi = { run: async () => { throw new Error('whisper exploded') } } as unknown as Ai
+    const { e, r2, row } = setup({ AI_DRY_RUN: 'false', AI: throwingAi })
+    await expect(transcribeRecording(e, { orgId: 'o1', recordingId: 'rec1', r2Key: KEY })).resolves.toBeUndefined()
+    expect(row.transcript_status).toBe('failed')
+    expect(row.transcript_r2_key).toBeNull()
+    // The recording itself is untouched: row present, key intact, audio still in R2.
+    expect(row.r2_key).toBe(KEY)
+    expect(r2.store.has(KEY)).toBe(true)
+  })
+
+  it("a missing R2 object => 'failed', no throw", async () => {
+    const { e, row } = setup({}, /* withAudio */ false)
+    await expect(transcribeRecording(e, { orgId: 'o1', recordingId: 'rec1', r2Key: KEY })).resolves.toBeUndefined()
+    expect(row.transcript_status).toBe('failed')
+    expect(row.transcript_r2_key).toBeNull()
   })
 })

@@ -7,6 +7,7 @@ import { insertCall, getCallBySid, updateCallOutcome } from '../db/calls'
 import { getOrgSettings, DEFAULT_ANNOUNCEMENT } from '../db/settings'
 import { insertRecording } from '../db/recordings'
 import { startCallRecording, fetchRecordingMedia } from '../lib/twilio/provisioning'
+import { transcribeRecording } from '../lib/ai/transcribe'
 import { pushPresence } from './realtime'
 
 // Twilio-called webhooks, not browser-called: outside the AuthPak gate (mounted before it
@@ -129,5 +130,7 @@ voice.post('/recording', async (c) => {
     id, organizationId: orgId, callId: call.id, twilioRecordingSid: recordingSid, r2Key: key,
     durationS: params.RecordingDuration ? Number(params.RecordingDuration) : null,
   })
-  return c.body(null, 204) // Step 7 adds the waitUntil transcription hand-off here.
+  // Hand transcription off out-of-band — Twilio must never wait on Whisper.
+  c.executionCtx.waitUntil(transcribeRecording(c.env, { orgId, recordingId: id, r2Key: key }))
+  return c.body(null, 204)
 })

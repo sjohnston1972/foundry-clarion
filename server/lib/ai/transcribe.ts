@@ -1,4 +1,5 @@
 import type { Bindings } from '../../types'
+import { setTranscript } from '../../db/recordings'
 
 export type Transcript = { text: string; model: string; dryRun: boolean }
 
@@ -16,4 +17,24 @@ export async function transcribeAudio(env: Bindings, audio: ArrayBuffer): Promis
     audio: [...new Uint8Array(audio)],
   })) as { text?: string }
   return { text: res.text ?? '', model: '@cf/openai/whisper', dryRun: false }
+}
+
+/** R2 -> Whisper -> R2 + cc_recordings. Never throws: failure sets transcript_status='failed'. */
+export async function transcribeRecording(
+  env: Bindings, opts: { orgId: string; recordingId: string; r2Key: string },
+): Promise<void> {
+  try {
+    const obj = await env.RECORDINGS.get(opts.r2Key)
+    if (!obj) {
+      await setTranscript(env.DB, opts.orgId, opts.recordingId, { transcriptR2Key: null, transcriptStatus: 'failed' })
+      return
+    }
+    const transcript = await transcribeAudio(env, await obj.arrayBuffer())
+    const key = `${opts.r2Key.replace(/\.mp3$/, '')}.transcript.json`
+    await env.RECORDINGS.put(key, JSON.stringify(transcript))
+    await setTranscript(env.DB, opts.orgId, opts.recordingId, { transcriptR2Key: key, transcriptStatus: 'done' })
+  } catch (e) {
+    console.error('transcribeRecording failed', e)
+    await setTranscript(env.DB, opts.orgId, opts.recordingId, { transcriptR2Key: null, transcriptStatus: 'failed' })
+  }
 }
