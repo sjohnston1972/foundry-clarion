@@ -42,3 +42,20 @@ Append one timestamped entry per completed step below. Do not rewrite history.
   Gate exits 0 (74/74 tests across 24 files, typecheck, lint, build).
 - Commit `cfd19cb`. **Pushed to origin successfully** — the Phase 3 push blocker is
   confirmed resolved (`989babc..cfd19cb`).
+
+## 2026-07-16 08:13 — Step 2 done: R2 + Workers AI bindings behind the `AI_DRY_RUN` rail
+
+- `wrangler.jsonc`: added `r2_buckets` (`RECORDINGS` → `foundry-clarion-recordings`),
+  `"ai": { "binding": "AI" }`, and extended `vars` to include `"AI_DRY_RUN": "true"`. No
+  cloud bucket created — Miniflare provides R2 locally, per the run invariants.
+- `server/types.ts`: `RECORDINGS: R2Bucket`, `AI: Ai`, `AI_DRY_RUN?: string` added to
+  `Bindings`, with the plan's cost-rail comments verbatim.
+- Verified: `npm run typecheck:server` exits 0. `npx wrangler dev --port 8787` boots with
+  the new bindings visible — `env.RECORDINGS … R2 Bucket local`, **`env.AI … AI remote`**,
+  `env.AI_DRY_RUN ("true")` — and wrangler's own boot warning confirms the rail's premise
+  verbatim: "AI bindings always access remote resources, and so may incur usage charges
+  even in local dev." `GET /api/health` → 200; server stopped cleanly.
+  `git grep -n '"AI_DRY_RUN"' wrangler.jsonc` → `"true"`. Full gate exits 0 (74/74 tests,
+  typecheck, lint, build).
+- No Workers AI call was made (the binding was never invoked; only `/api/health` was hit).
+- Commit `d62eb6d`, pushed to origin (`88fcff5..d62eb6d`).
