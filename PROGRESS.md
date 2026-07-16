@@ -193,3 +193,26 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx vitest run test/settings-route.test.ts` → 5/5. Gate exits 0 (95/95 tests,
   typecheck, lint, build).
 - Commit `e2f6d7b`, pushed to origin (`ec11a22..e2f6d7b`).
+
+## 2026-07-16 22:33 — Step 9 done: reports API (filters + aggregates)
+
+- `server/db/calls.ts`: added `CallFilter`, `CallSummary`, `whereFor` (WHERE built from
+  bound values only — column names never interpolated), `queryCalls` (`started_at DESC
+  LIMIT 500`) and `summarizeCalls` (COUNT/answered/abandoned via `agent_id` presence,
+  `COALESCE(AVG(duration_s), 0)` rounded) — all verbatim from the plan, keeping raw SQL out
+  of handlers per CLAUDE.md §10.
+- `server/routes/reports.ts` (new): `GET /api/reports/calls`,
+  `requireClarionRole('supervisor')`, reads the five filters from the query string
+  (empty-string query values normalised to `undefined` so they don't bind as filters),
+  returns `{ success: true, data: { calls, summary } }`. Mounted inside the gate.
+- `test/reports-route.test.ts` (4 tests): the fake D1 interprets exactly the clause strings
+  `whereFor` emits against rows seeded across two orgs (o2's call deliberately reuses o1's
+  queue id). Agent ⇒ 403; supervisor ⇒ 200, 3 rows, summary
+  `{ total: 3, answered: 2, abandoned: 1, avgDurationS: 45 }` (AVG ignores the NULL
+  duration — the fake mimics SQL semantics); each of the five filters narrows the set, plus
+  a combined queueId+disposition case with its own summary arithmetic; **cross-tenant** —
+  an org B session passing org A's `queueId` returns only org B's call (`c4`), never org
+  A's rows, and its summary counts only org B.
+- Verified: `npx vitest run test/reports-route.test.ts` → 4/4. Gate exits 0 (99/99 tests,
+  typecheck, lint, build).
+- Commit `a4fab4a`, pushed to origin (`1fceb4f..a4fab4a`).
