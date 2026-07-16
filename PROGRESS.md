@@ -216,3 +216,20 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx vitest run test/reports-route.test.ts` → 4/4. Gate exits 0 (99/99 tests,
   typecheck, lint, build).
 - Commit `a4fab4a`, pushed to origin (`1fceb4f..a4fab4a`).
+
+## 2026-07-16 22:37 — Step 10 done: recording media + transcript endpoints
+
+- `server/routes/recordings.ts` (new): `GET /api/recordings/:id/media` (plan snippet
+  verbatim — R2 stream, `audio/mpeg`, `cache-control: private, no-store`) and
+  `GET /:id/transcript` (same shape; 404 while `transcript_r2_key` is null; JSON with the
+  same no-store header). Both `requireClarionRole('supervisor')`. Cross-org reads are
+  **404, never 403** — deliberate, a 403 would confirm the id exists. Mounted inside the
+  gate (`app.route('/recordings', recordings)`).
+- `test/recordings-route.test.ts` (5 tests; two seeded o1 recordings — one transcribed, one
+  pending — plus a seeded fake R2): agent ⇒ 403 on both endpoints; supervisor media ⇒ 200
+  `audio/mpeg` + `private, no-store` + exact body; **cross-tenant**: an org B supervisor
+  fetching org A's recording id ⇒ 404 on both media and transcript; pending transcript ⇒
+  404; done transcript ⇒ 200 `application/json` with the stored transcript JSON.
+- Verified: `npx vitest run test/recordings-route.test.ts` → 5/5. Gate exits 0 (104/104
+  tests, typecheck, lint, build).
+- Commit `add90b6`, pushed to origin (`b8e40f2..add90b6`).
