@@ -6,6 +6,13 @@ export type Bindings = {
   WORKSPACE_DB: D1Database
   /** Per-org realtime hub. */
   REALTIME: DurableObjectNamespace
+  /** Recording audio + transcripts. Metadata lives in D1; bytes never do. */
+  RECORDINGS: R2Bucket
+  /** Workers AI (Whisper). NO local simulator — see AI_DRY_RUN. */
+  AI: Ai
+  /** When 'true' (default), Whisper is stubbed and NO Workers AI call is made.
+   *  wrangler dev proxies AI to the REAL API and bills the account. Do not flip this. */
+  AI_DRY_RUN?: string
   /** When 'true', a valid AuthPak session is REQUIRED (set at cutover). */
   AUTH_ENFORCE?: string
   /** Dev-only ('true' exactly): local-keypair session verify + /api/dev/session.
