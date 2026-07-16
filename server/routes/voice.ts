@@ -5,7 +5,8 @@ import { isValidTwilioSignature } from '../lib/twilio/signature'
 import { getQueueById } from '../db/queues'
 import { insertCall, getCallBySid, updateCallOutcome } from '../db/calls'
 import { getOrgSettings, DEFAULT_ANNOUNCEMENT } from '../db/settings'
-import { startCallRecording } from '../lib/twilio/provisioning'
+import { insertRecording } from '../db/recordings'
+import { startCallRecording, fetchRecordingMedia } from '../lib/twilio/provisioning'
 import { pushPresence } from './realtime'
 
 // Twilio-called webhooks, not browser-called: outside the AuthPak gate (mounted before it
@@ -98,4 +99,35 @@ voice.post('/status', async (c) => {
 
   await pushPresence(c.env, orgId, { identity: `call:${callSid}`, status, at: Date.now() })
   return c.body(null, 204)
+})
+
+// POST /api/voice/recording?orgId=... — Twilio's recordingStatusCallback. Audio bytes
+// land in R2 (real even in dry-run — Miniflare simulates R2 locally); D1 holds metadata only.
+voice.post('/recording', async (c) => {
+  const params = await parseFormParams(c.req.raw)
+  const signature = c.req.header('X-Twilio-Signature')
+  if (!(await isValidTwilioSignature(c.env.TWILIO_AUTH_TOKEN, c.req.url, params, signature ?? null))) {
+    return err(c, 'bad_signature', 'Invalid Twilio signature', 403)
+  }
+  const orgId = c.req.query('orgId')
+  if (!orgId) return err(c, 'bad_input', 'orgId is required', 400)
+  if ((params.RecordingStatus ?? '') !== 'completed') return c.body(null, 204)
+
+  const callSid = params.CallSid
+  const recordingSid = params.RecordingSid
+  if (!callSid || !recordingSid) return err(c, 'bad_input', 'CallSid and RecordingSid are required', 400)
+
+  const call = await getCallBySid(c.env.DB, orgId, callSid)
+  if (!call) return err(c, 'not_found', 'Call not found', 404)
+
+  const key = `orgs/${orgId}/calls/${callSid}/${recordingSid}.mp3`
+  const bytes = await fetchRecordingMedia(c.env, { recordingSid, mediaUrl: params.RecordingUrl ?? '' })
+  await c.env.RECORDINGS.put(key, bytes)
+
+  const id = crypto.randomUUID()
+  await insertRecording(c.env.DB, {
+    id, organizationId: orgId, callId: call.id, twilioRecordingSid: recordingSid, r2Key: key,
+    durationS: params.RecordingDuration ? Number(params.RecordingDuration) : null,
+  })
+  return c.body(null, 204) // Step 7 adds the waitUntil transcription hand-off here.
 })

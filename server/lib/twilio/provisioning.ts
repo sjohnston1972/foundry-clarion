@@ -90,6 +90,19 @@ export async function startCallRecording(
   return { recordingSid: json.sid, dryRun: false }
 }
 
+/** Fetch recording audio. DRY_RUN => synthetic bytes, no network. The R2 write is still real. */
+export async function fetchRecordingMedia(
+  env: Bindings, args: { recordingSid: string; mediaUrl: string },
+): Promise<ArrayBuffer> {
+  if (isDryRun(env)) {
+    return new TextEncoder().encode(`dryrun-audio:${args.recordingSid}`).buffer as ArrayBuffer
+  }
+  // LIVE PATH — only reached after Steven flips TWILIO_DRY_RUN=false in-session.
+  const res = await fetch(args.mediaUrl, { headers: { Authorization: authHeader(env) } })
+  if (!res.ok) throw new Error(`Twilio fetchRecordingMedia failed: ${res.status}`)
+  return await res.arrayBuffer()
+}
+
 /** Ensure the single shared TaskRouter Workspace exists. DRY_RUN => returns configured/fake sid. */
 export async function ensureTaskRouterWorkspace(env: Bindings): Promise<{ workspaceSid: string; dryRun: boolean }> {
   if (isDryRun(env)) {

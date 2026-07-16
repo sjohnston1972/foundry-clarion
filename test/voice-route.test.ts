@@ -17,11 +17,14 @@ const AUTH_TOKEN = 'test-auth-token'
 const BASE_URL = 'http://localhost'
 
 type FakeSettings = { recording_enabled: number; announcement_text: string | null }
+type FakeDbHandle = D1Database & { recordingsStore: Record<string, unknown>[] }
 
-function fakeDb(settings?: FakeSettings) {
+function fakeDb(settings?: FakeSettings): FakeDbHandle {
   const queues: Record<string, unknown>[] = [{ id: 'q1', organization_id: 'o1', name: 'Support', twilio_workflow_sid: 'WWabc123', strategy: 'longest-idle' }]
   const calls: Record<string, unknown>[] = []
-  return {
+  const recordings: Record<string, unknown>[] = []
+  const db = {
+    recordingsStore: recordings,
     prepare(sql: string) {
       return {
         bind: (...a: unknown[]) => ({
@@ -39,12 +42,29 @@ function fakeDb(settings?: FakeSettings) {
               const row = calls.find((c) => c.organization_id === a[3] && c.twilio_call_sid === a[4])
               if (row) { row.disposition = a[0]; row.duration_s = a[1]; row.agent_id = a[2] }
             }
+            if (sql.startsWith('INSERT INTO cc_recordings')) {
+              recordings.push({ id: a[0], organization_id: a[1], call_id: a[2], twilio_recording_sid: a[3], r2_key: a[4], duration_s: a[5], transcript_r2_key: null, transcript_status: 'pending' })
+            }
             return {}
           },
         }),
       }
     },
-  } as unknown as D1Database
+  }
+  return db as unknown as FakeDbHandle
+}
+
+function fakeR2() {
+  const store = new Map<string, ArrayBuffer>()
+  return {
+    bucket: {
+      put: async (k: string, v: ArrayBuffer) => { store.set(k, v); return {} },
+      get: async (k: string) => store.has(k)
+        ? { arrayBuffer: async () => store.get(k)!, body: null }
+        : null,
+    } as unknown as R2Bucket,
+    store,
+  }
 }
 
 function fakeRealtime(seen: Request[]) {
@@ -52,7 +72,10 @@ function fakeRealtime(seen: Request[]) {
   return { idFromName: (_n: string) => ({ toString: () => 'id' }), get: (_id: unknown) => stub } as unknown as DurableObjectNamespace
 }
 
-const env = (seen: Request[], settings?: FakeSettings) => ({ DB: fakeDb(settings), REALTIME: fakeRealtime(seen), TWILIO_AUTH_TOKEN: AUTH_TOKEN })
+const env = (seen: Request[], settings?: FakeSettings, r2?: R2Bucket) => ({
+  DB: fakeDb(settings), REALTIME: fakeRealtime(seen), TWILIO_AUTH_TOKEN: AUTH_TOKEN,
+  RECORDINGS: r2 ?? fakeR2().bucket,
+})
 
 async function signedRequest(path: string, params: Record<string, string>) {
   const url = `${BASE_URL}${path}`
@@ -185,5 +208,74 @@ describe('voice status webhook — recording start (dry-run)', () => {
   it('a non-in-progress status never starts recording, even when enabled', async () => {
     expect((await postStatus({ recording_enabled: 1, announcement_text: null }, 'completed')).status).toBe(204)
     expect(startCallRecording).not.toHaveBeenCalled()
+  })
+})
+
+describe('voice recording webhook — LINCHPIN: callback → R2 + cc_recordings', () => {
+  const recParams = (over: Record<string, string> = {}) => ({
+    CallSid: 'CAdryrun_1', RecordingSid: 'REdryrun_x', RecordingStatus: 'completed',
+    RecordingDuration: '42', RecordingUrl: 'https://api.twilio.com/fake/REdryrun_x', ...over,
+  })
+
+  // Seed the cc_calls row the callback looks up, via the status webhook on the SAME env.
+  const seedCall = async (e: ReturnType<typeof env>) => {
+    const params = { CallSid: 'CAdryrun_1', From: '+15551234567', To: '+15557654321', CallStatus: 'completed', CallDuration: '42' }
+    const req = await signedRequest('/api/voice/status?orgId=o1&queueId=q1', params)
+    const res = await createApp().request('/api/voice/status?orgId=o1&queueId=q1', { method: 'POST', ...req }, e)
+    expect(res.status).toBe(204)
+  }
+
+  const postRecording = async (e: ReturnType<typeof env>, params: Record<string, string>) => {
+    const req = await signedRequest('/api/voice/recording?orgId=o1', params)
+    return createApp().request('/api/voice/recording?orgId=o1', { method: 'POST', ...req }, e)
+  }
+
+  it('rejects a missing or invalid signature with 403', async () => {
+    const e = env([])
+    const missing = await createApp().request('/api/voice/recording?orgId=o1', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(recParams()).toString(),
+    }, e)
+    expect(missing.status).toBe(403)
+    const invalid = await createApp().request('/api/voice/recording?orgId=o1', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'X-Twilio-Signature': 'wrong' },
+      body: new URLSearchParams(recParams()).toString(),
+    }, e)
+    expect(invalid.status).toBe(403)
+  })
+
+  it('a non-completed status is a 204 no-op: nothing written', async () => {
+    const r2 = fakeR2()
+    const e = env([], undefined, r2.bucket)
+    await seedCall(e)
+    const res = await postRecording(e, recParams({ RecordingStatus: 'in-progress' }))
+    expect(res.status).toBe(204)
+    expect(r2.store.size).toBe(0)
+    expect((e.DB as FakeDbHandle).recordingsStore.length).toBe(0)
+  })
+
+  it('a completed callback writes the audio to R2 and a cc_recordings row', async () => {
+    const r2 = fakeR2()
+    const e = env([], undefined, r2.bucket)
+    await seedCall(e)
+    const res = await postRecording(e, recParams())
+    expect(res.status).toBe(204)
+
+    const key = 'orgs/o1/calls/CAdryrun_1/REdryrun_x.mp3'
+    expect([...r2.store.keys()]).toEqual([key])
+    expect(new TextDecoder().decode(r2.store.get(key)!)).toBe('dryrun-audio:REdryrun_x')
+
+    const rows = (e.DB as FakeDbHandle).recordingsStore
+    expect(rows.length).toBe(1)
+    expect(rows[0]).toMatchObject({
+      organization_id: 'o1', twilio_recording_sid: 'REdryrun_x', r2_key: key, duration_s: 42,
+      transcript_status: 'pending',
+    })
+  })
+
+  it('an unknown CallSid is a 404', async () => {
+    const e = env([])
+    const res = await postRecording(e, recParams({ CallSid: 'CA_unknown' }))
+    expect(res.status).toBe(404)
   })
 })
