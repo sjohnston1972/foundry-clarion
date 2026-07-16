@@ -147,3 +147,27 @@ Append one timestamped entry per completed step below. Do not rewrite history.
   **No Workers AI call was made at any point** (the only `AI` objects that exist in tests
   are fakes; the real binding was never invoked).
 - Commit `d9e97d1`, pushed to origin (`d02a468..d9e97d1`).
+
+## 2026-07-16 17:34 — Step 7 done: transcription wired into the webhook via `waitUntil`
+
+- `server/lib/ai/transcribe.ts`: added `transcribeRecording` verbatim from the plan — R2 →
+  Whisper → R2 + `cc_recordings`, **never throws**: a missing R2 object or a failing
+  provider sets `transcript_status='failed'` and returns; the recording row and its
+  `r2_key` are never touched by failure.
+- `server/routes/voice.ts` `POST /recording`: the Step 5 trailing comment replaced with
+  `c.executionCtx.waitUntil(transcribeRecording(...))` before the 204 — Twilio never waits
+  on Whisper.
+- `test/voice-route.test.ts`: `postRecording` now supplies a fake `ExecutionContext`
+  (collecting handed-off promises — Hono's `c.executionCtx` throws without one); `fakeDb`
+  gained the `UPDATE cc_recordings` branch (`setTranscript`). The completed-callback test
+  proves the ordering: 204 returned while the row is still un-transcribed, then awaiting
+  the collected promise lands `transcript_status='done'` + the `.transcript.json` object in
+  R2. Three direct `transcribeRecording` tests per the plan: success ⇒ `'done'`, key ends
+  `.transcript.json`, transcript JSON in the fake store (`[dry-run transcript]`,
+  `dryRun: true`); throwing `transcribeAudio` (via `AI_DRY_RUN='false'` + a throwing fake
+  `AI` — the real catch path, not a shortcut) ⇒ `'failed'`, `transcript_r2_key` null, row +
+  `r2_key` + audio object intact; missing R2 object ⇒ `'failed'`, resolves without throwing.
+- Verified: `npx vitest run test/voice-route.test.ts` → 18/18 (the stderr stack trace in
+  the run is the throwing-AI test's *expected* `console.error`). Gate exits 0 (90/90 tests,
+  typecheck, lint, build). No Workers AI call was made (only fakes).
+- Commit `3227919`, pushed to origin (`b266bb6..3227919`).
