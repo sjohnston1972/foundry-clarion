@@ -171,3 +171,25 @@ Append one timestamped entry per completed step below. Do not rewrite history.
   the run is the throwing-AI test's *expected* `console.error`). Gate exits 0 (90/90 tests,
   typecheck, lint, build). No Workers AI call was made (only fakes).
 - Commit `3227919`, pushed to origin (`b266bb6..3227919`).
+
+## 2026-07-16 17:38 — Step 8 done: settings API (admin-gated, audited)
+
+- `server/routes/settings.ts` (new), following `server/routes/queues.ts` exactly:
+  `GET /api/settings` returns `getOrgSettings` (the default-off posture reaches the API
+  surface); `PATCH /api/settings` validates `{ recordingEnabled?: boolean;
+  announcementText?: string | null }` — non-boolean `recordingEnabled` ⇒ `bad_input` 400,
+  `announcementText` must be string or null — then `upsertOrgSettings`. Both verbs
+  `requireClarionRole('admin')`. Every successful PATCH writes an `insertAuditLog` row
+  (`action: 'settings.update'` with the resulting state in `meta_json`).
+- Mounted **inside** the AuthPak gate in `server/app.ts` (`app.route('/settings',
+  settings)`), after the gate middleware like `/queues`.
+- `test/settings-route.test.ts` (5 tests, mirroring the queues-route mock/fakeDb pattern,
+  with the settings + audit stores exposed for assertions): agent ⇒ 403 on **both** verbs;
+  supervisor ⇒ 403 on PATCH; admin GET ⇒ 200 with
+  `{ organizationId, recordingEnabled: false, announcementText: null }` for an
+  unconfigured org; PATCH round-trips through a subsequent GET **and** the audit row is
+  asserted (org, user `u-admin`, action, parsed `meta_json`); non-boolean
+  `recordingEnabled` ⇒ 400 `bad_input` with **no** audit row written.
+- Verified: `npx vitest run test/settings-route.test.ts` → 5/5. Gate exits 0 (95/95 tests,
+  typecheck, lint, build).
+- Commit `e2f6d7b`, pushed to origin (`ec11a22..e2f6d7b`).
