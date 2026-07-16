@@ -4,6 +4,7 @@ import { err } from '../lib/http'
 import { isValidTwilioSignature } from '../lib/twilio/signature'
 import { getQueueById } from '../db/queues'
 import { insertCall, getCallBySid, updateCallOutcome } from '../db/calls'
+import { getOrgSettings, DEFAULT_ANNOUNCEMENT } from '../db/settings'
 import { pushPresence } from './realtime'
 
 // Twilio-called webhooks, not browser-called: outside the AuthPak gate (mounted before it
@@ -43,7 +44,14 @@ voice.post('/inbound', async (c) => {
   if (!queue?.twilioWorkflowSid) return err(c, 'not_found', 'Queue not found or not provisioned', 404)
 
   const task = escapeXml(JSON.stringify({ organization_id: orgId, from: params.From ?? '', to: params.To ?? '' }))
-  return twiml(`<Response><Enqueue workflowSid="${queue.twilioWorkflowSid}"><Task>${task}</Task></Enqueue></Response>`)
+  // The consent invariant (Steven, 2026-07-16): the announcement is a function of
+  // recording_enabled — never a separate toggle. Recording off => TwiML is
+  // byte-for-byte what Phase 3 emits.
+  const settings = await getOrgSettings(c.env.DB, orgId)
+  const say = settings.recordingEnabled
+    ? `<Say>${escapeXml(settings.announcementText ?? DEFAULT_ANNOUNCEMENT)}</Say>`
+    : ''
+  return twiml(`<Response>${say}<Enqueue workflowSid="${queue.twilioWorkflowSid}"><Task>${task}</Task></Enqueue></Response>`)
 })
 
 // POST /api/voice/status?orgId=...&queueId=... — records call state into cc_calls and

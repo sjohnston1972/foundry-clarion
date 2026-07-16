@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { createApp } from '../server/app'
 import { computeTwilioSignature } from '../server/lib/twilio/signature'
+import { DEFAULT_ANNOUNCEMENT } from '../server/db/settings'
 
 const AUTH_TOKEN = 'test-auth-token'
 const BASE_URL = 'http://localhost'
 
-function fakeDb() {
+type FakeSettings = { recording_enabled: number; announcement_text: string | null }
+
+function fakeDb(settings?: FakeSettings) {
   const queues: Record<string, unknown>[] = [{ id: 'q1', organization_id: 'o1', name: 'Support', twilio_workflow_sid: 'WWabc123', strategy: 'longest-idle' }]
   const calls: Record<string, unknown>[] = []
   return {
@@ -15,6 +18,7 @@ function fakeDb() {
           async first() {
             if (sql.includes('FROM cc_queues')) return queues.find((q) => q.organization_id === a[0] && q.id === a[1]) ?? null
             if (sql.includes('FROM cc_calls')) return calls.find((c) => c.organization_id === a[0] && c.twilio_call_sid === a[1]) ?? null
+            if (sql.includes('FROM cc_org_settings')) return settings && a[0] === 'o1' ? { organization_id: 'o1', ...settings } : null
             return null
           },
           async run() {
@@ -38,7 +42,7 @@ function fakeRealtime(seen: Request[]) {
   return { idFromName: (_n: string) => ({ toString: () => 'id' }), get: (_id: unknown) => stub } as unknown as DurableObjectNamespace
 }
 
-const env = (seen: Request[]) => ({ DB: fakeDb(), REALTIME: fakeRealtime(seen), TWILIO_AUTH_TOKEN: AUTH_TOKEN })
+const env = (seen: Request[], settings?: FakeSettings) => ({ DB: fakeDb(settings), REALTIME: fakeRealtime(seen), TWILIO_AUTH_TOKEN: AUTH_TOKEN })
 
 async function signedRequest(path: string, params: Record<string, string>) {
   const url = `${BASE_URL}${path}`
@@ -72,6 +76,36 @@ describe('voice webhooks — signature validation', () => {
     const body = await res.text()
     expect(body).toContain('<Enqueue workflowSid="WWabc123">')
     expect(body).toContain('<Response>')
+  })
+})
+
+describe('voice inbound — the consent invariant (Steven, 2026-07-16)', () => {
+  const params = { From: '+15551234567', To: '+15557654321' }
+  const post = async (settings?: FakeSettings) => {
+    const req = await signedRequest('/api/voice/inbound?orgId=o1&queueId=q1', params)
+    const res = await createApp().request('/api/voice/inbound?orgId=o1&queueId=q1', { method: 'POST', ...req }, env([], settings))
+    expect(res.status).toBe(200)
+    return res.text()
+  }
+
+  it('consent invariant: recording off => no announcement, no recording', async () => {
+    // Explicitly disabled, and (the default posture) no settings row at all.
+    for (const body of [await post({ recording_enabled: 0, announcement_text: 'ignored' }), await post(undefined)]) {
+      expect(body).not.toContain('<Say>')
+      // Byte-for-byte the Phase 3 shape: <Response> straight into <Enqueue>.
+      expect(body).toContain('<Response><Enqueue workflowSid="WWabc123">')
+    }
+  })
+
+  it("recording on => <Say> with the org's own wording", async () => {
+    const body = await post({ recording_enabled: 1, announcement_text: 'Custom org announcement.' })
+    expect(body).toContain('<Say>Custom org announcement.</Say>')
+    expect(body.indexOf('<Say>')).toBeLessThan(body.indexOf('<Enqueue'))
+  })
+
+  it('recording on with NULL wording => <Say> carries the default announcement', async () => {
+    const body = await post({ recording_enabled: 1, announcement_text: null })
+    expect(body).toContain(`<Say>${DEFAULT_ANNOUNCEMENT}</Say>`)
   })
 })
 
