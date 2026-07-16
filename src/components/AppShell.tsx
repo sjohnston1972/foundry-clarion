@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom'
 import type { ComponentType } from 'react'
-import { Phone, Users, ListOrdered, LayoutDashboard } from 'lucide-react'
+import { Phone, Users, ListOrdered, LayoutDashboard, Settings } from 'lucide-react'
 import type { AuthStatus } from '../lib/session'
 import { cn } from '../lib/utils'
 
@@ -10,15 +10,17 @@ import { cn } from '../lib/utils'
  * AppShell.tsx (641 lines, wired into departments/plans/billing/tickets/a
  * command palette Clarion doesn't have) — see CLAUDE.md §14.
  */
-const NAV: Array<{ to: string; label: string; icon: ComponentType<{ className?: string }>; end?: boolean }> = [
+const NAV: Array<{ to: string; label: string; icon: ComponentType<{ className?: string }>; end?: boolean; adminOnly?: boolean }> = [
   { to: '/', label: 'Softphone', icon: Phone, end: true },
   { to: '/agents', label: 'Agents', icon: Users },
   { to: '/queues', label: 'Queues', icon: ListOrdered },
   { to: '/wallboard', label: 'Wallboard', icon: LayoutDashboard },
+  { to: '/settings', label: 'Settings', icon: Settings, adminOnly: true },
 ]
 
 export function AppShell() {
   const status = useOutletContext<AuthStatus>()
+  const nav = NAV.filter((item) => !item.adminOnly || status.clarionRole === 'admin')
   return (
     <div className="flex min-h-full">
       <aside className="w-56 shrink-0 border-r border-line bg-surface p-4">
@@ -26,7 +28,7 @@ export function AppShell() {
           Foundry <span className="text-[var(--color-accent)]">Clarion</span>
         </div>
         <nav aria-label="Primary" className="space-y-1">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

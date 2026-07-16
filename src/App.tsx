@@ -5,6 +5,7 @@ import Softphone from './pages/Softphone'
 import Agents from './pages/Agents'
 import Queues from './pages/Queues'
 import Wallboard from './pages/Wallboard'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="agents" element={<Agents />} />
           <Route path="queues" element={<Queues />} />
           <Route path="wallboard" element={<Wallboard />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Route>
     </Routes>
