@@ -80,3 +80,26 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx vitest run test/voice-route.test.ts` → 8/8 (5 Phase 3 + 3 new). Gate exits
   0 (77/77 tests, typecheck, lint, build).
 - Commit `29e2325`, pushed to origin (`e1dc768..29e2325`).
+
+## 2026-07-16 12:34 — Step 4 done: start recording on the in-progress leg (dry-run)
+
+- `server/lib/twilio/provisioning.ts`: added `API_BASE` and `startCallRecording` verbatim
+  from the plan — dry-run returns a deterministic `REdryrun_<uuid>` with no network; the
+  live path (POST `/2010-04-01/Accounts/{sid}/Calls/{callSid}/Recordings.json` with
+  `RecordingStatusCallback`) is written but unreachable while `TWILIO_DRY_RUN !== 'false'`.
+- `server/routes/voice.ts` `POST /status`: when `CallStatus === 'in-progress'` **and**
+  `getOrgSettings(...).recordingEnabled`, starts the recording — wrapped in try/catch so a
+  failure never fails the webhook (mirroring `pushPresence`'s non-fatal posture). Callback
+  URL = the request's own URL with pathname swapped to `/api/voice/recording`, preserving
+  `?orgId=&queueId=` for Step 5.
+- `test/voice-route.test.ts`: the provisioning module is now spy-wrapped via `vi.mock` +
+  `importOriginal` — the real dry-run implementation still runs, but invocations are
+  observable. Three new tests: disabled/unconfigured ⇒ `startCallRecording` never called;
+  enabled ⇒ called once, callback pathname `/api/voice/recording` with `orgId=o1`, result a
+  `REdryrun_` SID with `dryRun: true`, and a stubbed `fetch` proves **no call to
+  `api.twilio.com`** escapes; a non-`in-progress` status never starts recording even when
+  enabled. (Cleaned up one duplicated missing-signature test my edit initially introduced —
+  caught on read-back before committing.)
+- Verified: `npx vitest run test/voice-route.test.ts` → 11/11. Gate exits 0 (80/80 tests,
+  typecheck, lint, build). `git grep -n "TWILIO_DRY_RUN" wrangler.jsonc` → still `"true"`.
+- Commit `5170882`, pushed to origin (`daca11b..5170882`).
