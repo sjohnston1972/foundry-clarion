@@ -9,6 +9,7 @@ import { token } from './routes/token'
 import { realtime } from './routes/realtime'
 import { queues } from './routes/queues'
 import { voice } from './routes/voice'
+import { settings } from './routes/settings'
 import { dev } from './routes/dev'
 import { touchOrgDirectory } from './db/directory'
 import { resolveClarionRole } from './lib/auth'
@@ -82,5 +83,6 @@ export function createApp() {
   app.route('/token', token)
   app.route('/realtime', realtime)
   app.route('/queues', queues)
+  app.route('/settings', settings)
   return app
 }
