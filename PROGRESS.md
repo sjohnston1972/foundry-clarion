@@ -14,3 +14,31 @@ binding proxies to the real API and bills the account.
 Append one timestamped entry per completed step below. Do not rewrite history.
 
 ---
+
+## 2026-07-16 08:10 — Step 1 done: schema + accessors for org settings and recordings
+
+- Read the design spec (`docs/superpowers/specs/2026-07-16-phase-4-recording-reporting-design.md`)
+  in full before touching anything, per the plan's instruction.
+- `migrations/0004_recordings.sql`: `cc_org_settings` (`recording_enabled INTEGER NOT NULL
+  DEFAULT 0` — the consent default is DDL) and `cc_recordings` (org-scoped by column — the
+  deliberate deviation from design §4 the plan documents; unique on org+`twilio_recording_sid`,
+  FK to `cc_calls` `ON DELETE CASCADE`, `transcript_status` defaulting `'pending'`, indexed
+  by org and call).
+- `server/db/settings.ts` (verbatim from the plan): `getOrgSettings` returns
+  `recordingEnabled: false` for an absent row — never create-on-read; `upsertOrgSettings`
+  with conflict-update; `DEFAULT_ANNOUNCEMENT` exported for Step 3.
+- `server/db/recordings.ts` mirroring `server/db/calls.ts`: `Recording`,
+  `TranscriptStatus = 'pending'|'done'|'failed'|'skipped'`, `insertRecording`,
+  `getRecordingById(db, orgId, id)`, `listRecordingsForCall(db, orgId, callId)`,
+  `setTranscript(db, orgId, id, …)` — every query filtered by `organization_id`.
+- Tests (10 new, all required cases present): `test/recordings-migration.test.ts` (tables,
+  the `DEFAULT 0` consent posture, org unique + FK, pending default);
+  `test/settings-db.test.ts` (**default off** on absent row + still absent after read;
+  upsert round-trips both fields, idempotent on conflict, partial patch keeps the other
+  field, explicit null clears; cross-tenant); `test/recordings-db.test.ts` (insert/read/list;
+  **cross-tenant leak**: org B cannot `getRecordingById` org A's recording; `setTranscript`
+  org-scoped — a cross-org update is a no-op).
+- Verified: `npm run d1:migrate:local` applied `0004_recordings.sql` cleanly (6 commands, ✅).
+  Gate exits 0 (74/74 tests across 24 files, typecheck, lint, build).
+- Commit `cfd19cb`. **Pushed to origin successfully** — the Phase 3 push blocker is
+  confirmed resolved (`989babc..cfd19cb`).
