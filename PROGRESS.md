@@ -59,3 +59,24 @@ Append one timestamped entry per completed step below. Do not rewrite history.
   typecheck, lint, build).
 - No Workers AI call was made (the binding was never invoked; only `/api/health` was hit).
 - Commit `d62eb6d`, pushed to origin (`88fcff5..d62eb6d`).
+
+## 2026-07-16 08:17 — Step 3 done: the consent invariant (announcement TwiML)
+
+- `server/routes/voice.ts` `POST /inbound`: after resolving the queue, reads
+  `getOrgSettings` and prepends `<Say>{announcementText ?? DEFAULT_ANNOUNCEMENT}</Say>`
+  (XML-escaped) **only** when `recordingEnabled` — exactly the plan's snippet, with a
+  comment naming the invariant and its date so the code carries the decision.
+- Recording off ⇒ TwiML byte-for-byte the Phase 3 shape: the five existing voice-route
+  assertions pass **untouched** (verified — no edits to them).
+- `test/voice-route.test.ts`: `fakeDb()` gained a `cc_org_settings` branch (parameterized
+  per test, following the existing `cc_queues` branch); `env()` passes it through. Three
+  new cases in a dedicated describe:
+  (a) test named exactly `consent invariant: recording off => no announcement, no
+  recording` — covers **both** explicit `recording_enabled = 0` and the absent-row default,
+  asserting no `<Say>` and the exact Phase 3 `<Response><Enqueue …` shape;
+  (b) enabled with org wording ⇒ `<Say>Custom org announcement.</Say>` and the `<Say>`
+  precedes `<Enqueue>`;
+  (c) enabled with `announcement_text = NULL` ⇒ `<Say>` carries `DEFAULT_ANNOUNCEMENT`.
+- Verified: `npx vitest run test/voice-route.test.ts` → 8/8 (5 Phase 3 + 3 new). Gate exits
+  0 (77/77 tests, typecheck, lint, build).
+- Commit `29e2325`, pushed to origin (`e1dc768..29e2325`).
