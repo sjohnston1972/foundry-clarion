@@ -1,6 +1,7 @@
 import type { Bindings } from '../../types'
 
 const TASKROUTER_BASE = 'https://taskrouter.twilio.com/v1'
+const API_BASE = 'https://api.twilio.com/2010-04-01'
 
 export function isDryRun(env: Bindings): boolean {
   return env.TWILIO_DRY_RUN !== 'false'
@@ -64,6 +65,29 @@ export async function createWorkflow(
   if (!res.ok) throw new Error(`TaskRouter createWorkflow failed: ${res.status} ${await res.text()}`)
   const json = (await res.json()) as { sid: string }
   return { workflowSid: json.sid, dryRun: false }
+}
+
+/** Start recording an in-progress call leg. DRY_RUN => deterministic fake SID, no network. */
+export async function startCallRecording(
+  env: Bindings, args: { callSid: string; recordingStatusCallback: string },
+): Promise<{ recordingSid: string; dryRun: boolean }> {
+  if (isDryRun(env)) {
+    return { recordingSid: `REdryrun_${crypto.randomUUID().replace(/-/g, '')}`, dryRun: true }
+  }
+  // LIVE PATH — only reached after Steven flips TWILIO_DRY_RUN=false in-session.
+  const auth = authHeader(env)
+  const body = new URLSearchParams({
+    RecordingStatusCallback: args.recordingStatusCallback,
+    RecordingStatusCallbackEvent: 'completed',
+  })
+  const res = await fetch(`${API_BASE}/Accounts/${env.TWILIO_ACCOUNT_SID}/Calls/${args.callSid}/Recordings.json`, {
+    method: 'POST',
+    headers: { Authorization: auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  if (!res.ok) throw new Error(`Twilio startCallRecording failed: ${res.status} ${await res.text()}`)
+  const json = (await res.json()) as { sid: string }
+  return { recordingSid: json.sid, dryRun: false }
 }
 
 /** Ensure the single shared TaskRouter Workspace exists. DRY_RUN => returns configured/fake sid. */

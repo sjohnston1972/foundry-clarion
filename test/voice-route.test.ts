@@ -1,7 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Spy-wrap the REAL provisioning module: dry-run behaviour is preserved (the actual
+// implementation runs), but tests can assert whether and how startCallRecording was
+// invoked by the status webhook.
+vi.mock('../server/lib/twilio/provisioning', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../server/lib/twilio/provisioning')>()
+  return { ...actual, startCallRecording: vi.fn(actual.startCallRecording) }
+})
+
 import { createApp } from '../server/app'
 import { computeTwilioSignature } from '../server/lib/twilio/signature'
 import { DEFAULT_ANNOUNCEMENT } from '../server/db/settings'
+import { startCallRecording } from '../server/lib/twilio/provisioning'
 
 const AUTH_TOKEN = 'test-auth-token'
 const BASE_URL = 'http://localhost'
@@ -126,5 +136,54 @@ describe('voice status webhook — cc_calls + DO push', () => {
       body: new URLSearchParams(params).toString(),
     }, env([]))
     expect(res.status).toBe(403)
+  })
+})
+
+describe('voice status webhook — recording start (dry-run)', () => {
+  beforeEach(() => {
+    vi.mocked(startCallRecording).mockClear()
+  })
+
+  const postStatus = async (settings?: FakeSettings, callStatus = 'in-progress') => {
+    const params = { CallSid: 'CAdryrun_rec', From: '+15551234567', To: '+15557654321', CallStatus: callStatus }
+    const req = await signedRequest('/api/voice/status?orgId=o1&queueId=q1', params)
+    return createApp().request('/api/voice/status?orgId=o1&queueId=q1', { method: 'POST', ...req }, env([], settings))
+  }
+
+  it('does not start recording when disabled or unconfigured (the consent invariant)', async () => {
+    expect((await postStatus({ recording_enabled: 0, announcement_text: null })).status).toBe(204)
+    expect((await postStatus(undefined)).status).toBe(204)
+    expect(startCallRecording).not.toHaveBeenCalled()
+  })
+
+  it('starts recording when enabled — callback carries orgId, dry-run SID, no fetch to api.twilio.com', async () => {
+    const fetchSpy = vi.fn(async () => { throw new Error('network must not be called in dry-run') })
+    vi.stubGlobal('fetch', fetchSpy)
+    try {
+      const res = await postStatus({ recording_enabled: 1, announcement_text: null })
+      expect(res.status).toBe(204)
+      expect(startCallRecording).toHaveBeenCalledTimes(1)
+
+      const args = vi.mocked(startCallRecording).mock.calls[0][1]
+      expect(args.callSid).toBe('CAdryrun_rec')
+      const cb = new URL(args.recordingStatusCallback)
+      expect(cb.pathname).toBe('/api/voice/recording')
+      expect(cb.searchParams.get('orgId')).toBe('o1')
+
+      const out = await vi.mocked(startCallRecording).mock.results[0].value
+      expect(out.recordingSid).toMatch(/^REdryrun_/)
+      expect(out.dryRun).toBe(true)
+
+      for (const call of fetchSpy.mock.calls) {
+        expect(String(call[0])).not.toContain('api.twilio.com')
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('a non-in-progress status never starts recording, even when enabled', async () => {
+    expect((await postStatus({ recording_enabled: 1, announcement_text: null }, 'completed')).status).toBe(204)
+    expect(startCallRecording).not.toHaveBeenCalled()
   })
 })

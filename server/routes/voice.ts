@@ -5,6 +5,7 @@ import { isValidTwilioSignature } from '../lib/twilio/signature'
 import { getQueueById } from '../db/queues'
 import { insertCall, getCallBySid, updateCallOutcome } from '../db/calls'
 import { getOrgSettings, DEFAULT_ANNOUNCEMENT } from '../db/settings'
+import { startCallRecording } from '../lib/twilio/provisioning'
 import { pushPresence } from './realtime'
 
 // Twilio-called webhooks, not browser-called: outside the AuthPak gate (mounted before it
@@ -78,6 +79,22 @@ voice.post('/status', async (c) => {
     })
   }
   await updateCallOutcome(c.env.DB, orgId, callSid, { disposition: status, durationS, agentId: existing?.agentId ?? null })
+
+  // Best-effort recording start, mirroring pushPresence's non-fatal posture — a
+  // recording failure must never fail the status webhook. Only fires when the org
+  // has recording enabled (the consent invariant gates this at the settings layer).
+  if (params.CallStatus === 'in-progress') {
+    const settings = await getOrgSettings(c.env.DB, orgId)
+    if (settings.recordingEnabled) {
+      const cb = new URL(c.req.url)
+      cb.pathname = '/api/voice/recording' // keeps ?orgId=&queueId=
+      try {
+        await startCallRecording(c.env, { callSid, recordingStatusCallback: cb.toString() })
+      } catch (e) {
+        console.error('startCallRecording failed', e)
+      }
+    }
+  }
 
   await pushPresence(c.env, orgId, { identity: `call:${callSid}`, status, at: Date.now() })
   return c.body(null, 204)
