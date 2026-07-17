@@ -1,0 +1,96 @@
+Run: IVR builder (v1) — feat/ivr-builder
+Finished: 2026-07-17
+
+## What this run accomplished
+
+All 14 steps in PLAN.md are complete. Full v1 IVR builder shipped on
+`feat/ivr-builder`, TDD throughout, everything under the dry-run rails
+(no live Twilio mutation, no live AI spend):
+
+**Backend (Steps 1-9, 34 test files / 167 tests, typecheck + lint clean):**
+- Migration `0005_ivr.sql` — `cc_ivr_flows` + `cc_voicemails`.
+- DB accessors (`server/db/ivr-flows.ts`, `server/db/voicemails.ts`).
+- Graph model + the 5 validation rules (`server/lib/ivr/graph.ts`,
+  `server/lib/ivr/validate.ts`).
+- Pure interpreter core (`server/lib/ivr/interpret.ts`) — walks a flow
+  graph node-by-node, no D1/Twilio I/O.
+- The interpreter webhook (`POST /api/voice/ivr`) and voicemail callback
+  (`POST /api/voice/voicemail`), signature-validated, mounted outside
+  the AuthPak gate.
+- Flow CRUD API + voicemail read API (`server/routes/ivr.ts`), org-scoped,
+  cross-org access returns 404 (never 403) throughout.
+
+**Frontend (Steps 10-13, verified by `npm run build` + `npm run lint` —
+no unit-test harness for the frontend, per the plan):**
+- Flow list page (`src/pages/IvrFlows.tsx`), nav entry, `@xyflow/react` dep.
+- Editor canvas (`src/pages/IvrEditor.tsx` + `src/components/ivr/*`) —
+  custom node components per type, a palette, drag-to-connect edges with
+  branch selection, a config panel bound to the selected node/edge, Save.
+- Client-side validation (`src/lib/ivr/validate.ts`) mirroring the
+  server's rules live, blocking Save while invalid.
+- An in-browser simulator (`src/lib/ivr/simulate.ts` +
+  `SimulatorPanel.tsx`) — walk the flow with no real call, press menu
+  keys, submit collect digits, toggle after-hours, see the TwiML that
+  would be emitted, watch the path highlight on the canvas.
+
+**Notable infrastructure move (Step 11):** the graph model moved to
+`shared/ivr/graph.ts` (this repo already had `@shared/*` wired in
+tsconfig/vite config, unused until now) so the server interpreter and
+the client editor share one type definition instead of a hand-kept
+duplicate. Validation logic and the simulator walker stayed deliberate
+mirrors (client copies), not shared modules, since they run client-side
+with no server counterpart to import from and may reasonably diverge
+over time (per the design spec's own "mirrored in the client" wording).
+
+**Docs (Step 14):** `CLAUDE.md` §6/§7 and
+`docs/design/foundry-clarion-design.md` §4/§9 updated to reflect the
+native-interpreter decision (superseding the original "Studio flow
+reference" assumption) and the new tables.
+
+Final gate green: `npx vitest run` (167 tests), `npm run
+typecheck:server`, `npm run lint`, `npm run build` — all clean.
+
+## What's NOT done (deliberate scope, not a blocker)
+
+- **Attaching a flow to a real inbound number** — needs `cc_numbers` +
+  live Twilio. Explicitly out of scope for v1, called out repeatedly in
+  the spec as Phase 5 work.
+- **Voicemail transcript read endpoint** — `cc_recordings` has one
+  (`GET /api/recordings/:id/transcript`); `cc_voicemails` doesn't, because
+  Step 8's plan scope literally said "list + media endpoints" only. Cheap
+  follow-up if wanted — mirror the recordings transcript route.
+- **Visual polish of the editor canvas** — functional, validated,
+  design-token styled, but the plan's own notes flagged true polish as
+  best iterated interactively with Steven rather than gold-plated
+  overnight. The simulator + a clean layout were the bar for this run.
+- **No human has driven the editor + simulator live in a browser yet.**
+  Steps 10-13 were verified by build/typecheck/lint (the plan's own
+  chosen gate, since the frontend has no unit-test harness) — nobody has
+  clicked through `npm run dev` and actually built/tested a flow by hand.
+  This is the natural first thing to do in the next interactive session.
+
+## Where the archive went
+
+`PLAN.md` and `PROGRESS.md` moved to
+`docs/runs/2026-07-17-ivr-builder/` (this file, once the next run
+archives it, will land there too — see CLAUDE.md's "Starting a run" step 1).
+
+## Recommended starting point for the next session
+
+1. **Drive it live first.** Run `wrangler dev` + `vite dev` (or however
+   this repo's `run` skill launches it), mint a `DEV_AUTH` session, and
+   actually build a small flow (start -> menu -> route-to-queue /
+   voicemail) in the browser. Confirm the canvas, config panel, and
+   simulator feel right before merging — this is exactly the kind of
+   "beautiful" pass the plan deferred to you.
+2. **Decision needed from Steven:** merge `feat/ivr-builder` to `main`
+   now (backend + frontend both gate-clean), or keep iterating on visual
+   polish first? Either is reasonable — the branch is in a shippable
+   state as-is.
+3. **After that**, the natural next increments are either the small
+   voicemail-transcript-endpoint follow-up above, or moving on to Phase 5
+   (`cc_numbers`, live Twilio attachment, supervisor monitor/whisper/barge,
+   click-to-call outbound) per `docs/design/foundry-clarion-design.md` §9.
+
+This run is finished. Head over to your interactive session to plan the
+next run.
