@@ -5,6 +5,7 @@ import { requireClarionRole } from '../lib/auth'
 import { insertIvrFlow, getIvrFlowById, listIvrFlows, updateIvrFlow, deleteIvrFlow, type IvrFlowStatus } from '../db/ivr-flows'
 import { listQueues } from '../db/queues'
 import { insertAuditLog } from '../db/audit'
+import { getVoicemailById, listVoicemails } from '../db/voicemails'
 import { validateFlow } from '../lib/ivr/validate'
 import { emptyFlowDefinition, type IvrFlowDefinition } from '../lib/ivr/graph'
 
@@ -84,4 +85,22 @@ ivr.delete('/flows/:id', requireClarionRole('admin'), async (c) => {
     meta: { flowId: existing.id, name: existing.name },
   })
   return c.json({ success: true, data: { id: existing.id } })
+})
+
+// GET /api/ivr/voicemails — list the org's voicemails (supervisor+).
+ivr.get('/voicemails', requireClarionRole('supervisor'), async (c) => {
+  const orgId = c.get('organizationId')
+  if (!orgId) return err(c, 'no_org', 'No organization in session', 400)
+  return c.json({ success: true, data: await listVoicemails(c.env.DB, orgId) })
+})
+
+// GET /api/ivr/voicemails/:id/media — stream the audio from R2 (supervisor+).
+ivr.get('/voicemails/:id/media', requireClarionRole('supervisor'), async (c) => {
+  const orgId = c.get('organizationId')
+  if (!orgId) return err(c, 'no_org', 'No organization in session', 400)
+  const vm = await getVoicemailById(c.env.DB, orgId, c.req.param('id'))
+  if (!vm) return err(c, 'not_found', 'Voicemail not found', 404) // cross-org => 404, never 403
+  const obj = await c.env.RECORDINGS.get(vm.r2Key)
+  if (!obj) return err(c, 'not_found', 'Voicemail media not found', 404)
+  return new Response(obj.body, { headers: { 'content-type': 'audio/mpeg', 'cache-control': 'private, no-store' } })
 })

@@ -35,8 +35,13 @@ const validDef: IvrFlowDefinition = {
 
 type FakeDbHandle = D1Database & { flows: Record<string, unknown>[]; auditLog: Record<string, unknown>[] }
 
-function fakeDb(clarionRole: 'agent' | 'supervisor' | null, seedFlows: Record<string, unknown>[] = []): FakeDbHandle {
+function fakeDb(
+  clarionRole: 'agent' | 'supervisor' | null,
+  seedFlows: Record<string, unknown>[] = [],
+  seedVoicemails: Record<string, unknown>[] = [],
+): FakeDbHandle {
   const flows: Record<string, unknown>[] = seedFlows
+  const voicemails: Record<string, unknown>[] = seedVoicemails
   const queues: Record<string, unknown>[] = [
     { id: 'q_123', organization_id: 'o1', name: 'Sales', twilio_workflow_sid: 'WWtest123', strategy: 'longest-idle' },
   ]
@@ -51,11 +56,13 @@ function fakeDb(clarionRole: 'agent' | 'supervisor' | null, seedFlows: Record<st
             if (sql.includes('FROM cc_org_directory')) return { disabled: 0 }
             if (sql.includes('FROM cc_members')) return clarionRole ? { clarion_role: clarionRole } : null
             if (sql.includes('FROM cc_ivr_flows')) return flows.find((f) => f.organization_id === a[0] && f.id === a[1]) ?? null
+            if (sql.includes('FROM cc_voicemails')) return voicemails.find((v) => v.organization_id === a[0] && v.id === a[1]) ?? null
             return null
           },
           async all() {
             if (sql.includes('FROM cc_ivr_flows')) return { results: flows.filter((f) => f.organization_id === a[0]) }
             if (sql.includes('FROM cc_queues')) return { results: queues.filter((q) => q.organization_id === a[0]) }
+            if (sql.includes('FROM cc_voicemails')) return { results: voicemails.filter((v) => v.organization_id === a[0]) }
             return { results: [] }
           },
           async run() {
@@ -91,8 +98,24 @@ const seedFlow = (id: string, orgId: string, def: unknown, status = 'draft') => 
   id, organization_id: orgId, name: 'Main IVR', status, definition_json: JSON.stringify(def), updated_at: 1000,
 })
 
-const env = (clarionRole: 'agent' | 'supervisor' | null, seedFlows: Record<string, unknown>[] = []) => ({
-  DB: fakeDb(clarionRole, seedFlows), AUTH_ENFORCE: 'true',
+const seedVoicemail = (id: string, orgId: string, over: Record<string, unknown> = {}) => ({
+  id, organization_id: orgId, flow_id: 'f1', twilio_call_sid: 'CAdryrun_1', from_e164: '+15551234567',
+  r2_key: `orgs/${orgId}/voicemails/CAdryrun_1/${id}.mp3`, duration_s: 30, transcript_r2_key: null,
+  transcript_status: 'pending', created_at: 1000, ...over,
+})
+
+function fakeR2(seed: Record<string, string> = {}) {
+  const store = new Map(Object.entries(seed))
+  return { get: async (k: string) => (store.has(k) ? { body: store.get(k)! } : null) } as unknown as R2Bucket
+}
+
+const env = (
+  clarionRole: 'agent' | 'supervisor' | null,
+  seedFlows: Record<string, unknown>[] = [],
+  seedVoicemails: Record<string, unknown>[] = [],
+  r2?: R2Bucket,
+) => ({
+  DB: fakeDb(clarionRole, seedFlows, seedVoicemails), AUTH_ENFORCE: 'true', RECORDINGS: r2 ?? fakeR2(),
 })
 
 describe('ivr flow routes — role gates', () => {
@@ -218,6 +241,46 @@ describe('ivr flow routes — DELETE', () => {
   it('a cross-org delete is a 404', async () => {
     const e = env(null, [seedFlow('f1', 'o1', validDef)])
     const res = await createApp().request('/api/ivr/flows/f_missing', { method: 'DELETE', headers: { cookie: 'fnd_session=admin' } }, e)
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('ivr voicemail routes — role gates', () => {
+  it('agent gets 403 on list and media', async () => {
+    const e = env('agent', [], [seedVoicemail('vm1', 'o1')])
+    expect((await createApp().request('/api/ivr/voicemails', { headers: { cookie: 'fnd_session=agent' } }, e)).status).toBe(403)
+    expect((await createApp().request('/api/ivr/voicemails/vm1/media', { headers: { cookie: 'fnd_session=agent' } }, e)).status).toBe(403)
+  })
+
+  it('supervisor can list and stream media', async () => {
+    const key = 'orgs/o1/voicemails/CAdryrun_1/vm1.mp3'
+    const e = env('supervisor', [], [seedVoicemail('vm1', 'o1')], fakeR2({ [key]: 'audio-bytes-vm1' }))
+    expect((await createApp().request('/api/ivr/voicemails', { headers: { cookie: 'fnd_session=supervisor' } }, e)).status).toBe(200)
+    const media = await createApp().request('/api/ivr/voicemails/vm1/media', { headers: { cookie: 'fnd_session=supervisor' } }, e)
+    expect(media.status).toBe(200)
+    expect(media.headers.get('content-type')).toBe('audio/mpeg')
+    expect(media.headers.get('cache-control')).toBe('private, no-store')
+    expect(await media.text()).toBe('audio-bytes-vm1')
+  })
+})
+
+describe('ivr voicemail routes — cross-org / not found', () => {
+  it("org B fetching org A's voicemail id gets 404, not 403", async () => {
+    const e = env('supervisor', [], [seedVoicemail('vm1', 'o1')])
+    const res = await createApp().request('/api/ivr/voicemails/vm1/media', { headers: { cookie: 'fnd_session=supervisor-b' } }, e)
+    expect(res.status).toBe(404)
+  })
+
+  it('a list only returns the caller\'s own org voicemails', async () => {
+    const e = env('supervisor', [], [seedVoicemail('vm1', 'o1')])
+    const res = await createApp().request('/api/ivr/voicemails', { headers: { cookie: 'fnd_session=supervisor-b' } }, e)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data).toEqual([])
+  })
+
+  it('missing R2 media object is a 404 even with a valid voicemail row', async () => {
+    const e = env('supervisor', [], [seedVoicemail('vm1', 'o1')], fakeR2())
+    const res = await createApp().request('/api/ivr/voicemails/vm1/media', { headers: { cookie: 'fnd_session=supervisor' } }, e)
     expect(res.status).toBe(404)
   })
 })
