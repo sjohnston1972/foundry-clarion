@@ -32,3 +32,21 @@ get/list/update. Full suite green: 30 files, 117 tests. Committed as
 96bd48b and pushed to `feat/ivr-builder`.
 Next: Step 3 — graph model + validation (`server/lib/ivr/graph.ts`,
 `server/lib/ivr/validate.ts`).
+
+### 2026-07-17 — Step 3 done: graph model + validation
+
+Added `server/lib/ivr/graph.ts` (discriminated-union `IvrNode` types for all
+9 v1 node kinds, `IvrEdge`/`IvrFlowDefinition`, terminal/waiting type sets,
+`emptyFlowDefinition()` starter graph) and `server/lib/ivr/validate.ts`
+(`validateFlow(flow, {queueIds})` — the 5 spec rules: single start +
+entryNodeId, required branches per node type incl. menu digit-key +
+timeout/invalid, no orphans via forward BFS from start, every path reaches
+a terminal node via backward BFS from terminals, menu key uniqueness +
+collect identifier validity + routeToQueue queue existence). Returns
+`{valid, errors[]}` (all violations collected, not just the first) so the
+client can surface every failure inline in Step 12. `test/ivr-validate.test.ts`
+covers a valid flow plus each rule's violation, including a two-node cycle
+with no terminal exit for rule 4 (10 tests). Full suite green: 31 files,
+127 tests. `npm run typecheck:server` clean. Committed as a233872 and
+pushed to `feat/ivr-builder`.
+Next: Step 4 — interpreter core (`server/lib/ivr/interpret.ts`).
