@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHead, Button, Badge, EmptyState, TableSkeleton, ErrorState } from '../components/ui'
 import { fetchJson } from '../lib/api'
+import { QUEUE_STRATEGIES, QUEUE_STRATEGY_LABELS, DEFAULT_QUEUE_STRATEGY, type QueueStrategy } from '../lib/strategies'
 
 type Queue = { id: string; organizationId: string; name: string; twilioWorkflowSid: string | null; strategy: string }
 type QueueMember = { queueId: string; agentId: string; priority: number }
@@ -29,6 +30,19 @@ function QueueRow({ queue, agents }: { queue: Queue; agents: Agent[] }) {
     },
   })
 
+  const strategyMutation = useMutation({
+    mutationFn: (strategy: string) =>
+      fetchJson<Queue>(`/api/queues/${queue.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ strategy }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['queues'] }),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => fetchJson<{ id: string }>(`/api/queues/${queue.id}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['queues'] }),
+  })
+  const [confirming, setConfirming] = useState(false)
+
   const emailOf = (id: string) => agents.find((a) => a.id === id)?.email ?? id
   const members = membersQuery.data ?? []
   const unassigned = agents.filter((a) => !members.some((m) => m.agentId === a.id))
@@ -41,7 +55,27 @@ function QueueRow({ queue, agents }: { queue: Queue; agents: Agent[] }) {
           <div className="text-sm font-medium text-ink">{queue.name}</div>
           <div className="tabular text-xs text-muted">{queue.twilioWorkflowSid}</div>
         </div>
-        <Badge>{queue.strategy}</Badge>
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor={`strategy-${queue.id}`}>Distribution for {queue.name}</label>
+          <select
+            id={`strategy-${queue.id}`}
+            value={queue.strategy}
+            disabled={strategyMutation.isPending}
+            onChange={(e) => strategyMutation.mutate(e.target.value)}
+            className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink"
+          >
+            {QUEUE_STRATEGIES.map((s) => <option key={s} value={s}>{QUEUE_STRATEGY_LABELS[s]}</option>)}
+          </select>
+          {confirming ? (
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs text-muted">Delete “{queue.name}”? Agents unassigned; call history kept.</span>
+              <Button size="sm" variant="danger" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>Confirm</Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+            </span>
+          ) : (
+            <Button size="sm" variant="danger" onClick={() => setConfirming(true)}>Delete</Button>
+          )}
+        </div>
       </div>
 
       <div className="mt-3">
@@ -89,19 +123,21 @@ function QueueRow({ queue, agents }: { queue: Queue; agents: Agent[] }) {
 export default function Queues() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
+  const [newStrategy, setNewStrategy] = useState<QueueStrategy>(DEFAULT_QUEUE_STRATEGY)
 
   const queuesQuery = useQuery({ queryKey: ['queues'], queryFn: () => fetchJson<Queue[]>('/api/queues') })
   const agentsQuery = useQuery({ queryKey: ['agents'], queryFn: () => fetchJson<Agent[]>('/api/agents') })
 
   const createMutation = useMutation({
-    mutationFn: (queueName: string) =>
+    mutationFn: (payload: { name: string; strategy: QueueStrategy }) =>
       fetchJson<Queue>('/api/queues', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: queueName }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: () => {
       setName('')
+      setNewStrategy(DEFAULT_QUEUE_STRATEGY)
       queryClient.invalidateQueries({ queryKey: ['queues'] })
     },
   })
@@ -131,10 +167,10 @@ export default function Queues() {
         <Card>
           <CardHead title="Create queue" hint="Provisions a TaskRouter Workflow (dry-run under TWILIO_DRY_RUN)" />
           <form
-            className="flex items-center gap-2 px-5 pb-5"
+            className="flex flex-wrap items-center gap-2 px-5 pb-5"
             onSubmit={(e) => {
               e.preventDefault()
-              if (name.trim()) createMutation.mutate(name.trim())
+              if (name.trim()) createMutation.mutate({ name: name.trim(), strategy: newStrategy })
             }}
           >
             <label className="sr-only" htmlFor="queue-name">
@@ -147,6 +183,15 @@ export default function Queues() {
               placeholder="e.g. Support"
               className="h-9 flex-1 rounded-lg border border-line bg-surface px-3 text-sm text-ink"
             />
+            <label className="sr-only" htmlFor="queue-strategy">Distribution</label>
+            <select
+              id="queue-strategy"
+              value={newStrategy}
+              onChange={(e) => setNewStrategy(e.target.value as QueueStrategy)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-sm text-ink"
+            >
+              {QUEUE_STRATEGIES.map((s) => <option key={s} value={s}>{QUEUE_STRATEGY_LABELS[s]}</option>)}
+            </select>
             <Button variant="primary" type="submit" disabled={!name.trim() || createMutation.isPending}>
               Create queue
             </Button>
