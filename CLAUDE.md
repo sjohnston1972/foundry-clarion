@@ -152,7 +152,8 @@ Canonical schema is in `docs/design/foundry-clarion-design.md` §4; highlights:
 | `cc_ivr_flows` | Studio flow references | id, org_id, name, twilio_flow_sid, definition_json |
 | `cc_numbers` | Provisioned Twilio numbers | id, org_id, e164, twilio_number_sid, assigned_kind, assigned_id |
 | `cc_calls` | Call log (reporting) | id, org_id, twilio_call_sid, from_e164, to_e164, queue_id, agent_id, disposition, duration_s, started_at |
-| `cc_recordings` | Recording metadata (audio in R2) | id, call_id, r2_key, duration_s, transcript_r2_key |
+| `cc_org_settings` | Per-org recording settings — recording **off by default** (DDL, not app logic); announcement wording per-org | organization_id PK, recording_enabled (DEFAULT 0), announcement_text, updated_at |
+| `cc_recordings` | Recording metadata (audio in R2) — org-scoped by column, deliberately (leak test is a direct assertion) | id, organization_id, call_id, twilio_recording_sid, r2_key, duration_s, transcript_r2_key, transcript_status |
 | `cc_audit_log` | Who changed what | id, org_id, user_id, action, meta_json, created_at |
 
 **Workspace linkage is by EMAIL, not FK.** Workspace itself joins logins to `resources` on
@@ -190,6 +191,14 @@ the start.** One Durable Object **per org** is the realtime hub: TaskRouter even
 the org's DO → WebSocket fan-out to that org's connected browsers. A per-org DO also isolates
 realtime state by construction (one org's sockets/state never share an instance).
 
+**Call recording (Phase 4, 2026-07-16):** recording starts via the **REST API on the
+in-progress call leg** (`POST .../Calls/{sid}/Recordings.json` from the status webhook) —
+a considered choice, not an oversight: `<Enqueue>` has no `record` attribute, and the
+textbook conference-recording approach needs reservation acceptance, which is Phase 5.
+**Phase 5 should migrate to conference recording once reservations land**; at that point
+the REST call becomes redundant. Audio lands in R2 (`orgs/{org}/calls/{call}/{rec}.mp3`),
+transcripts via Workers AI Whisper behind `AI_DRY_RUN` (see §9).
+
 **All Twilio credentials** live in the Worker env, never in the frontend.
 The browser gets short-lived Twilio Access Tokens minted by Clarion.
 
@@ -225,6 +234,9 @@ CLOUDFLARE_ACCOUNT_ID=   # already in .env
 CLOUDFLARE_API_TOKEN=    # already in .env
 D1_DATABASE_ID=          # foundry-clarion-db (Clarion's OWN db; created Phase 0)
 R2_BUCKET_RECORDINGS=foundry-clarion-recordings
+# AI_DRY_RUN lives in wrangler.jsonc vars (default "true"), not .env. It is a COST rail:
+# Workers AI has NO local simulator — under `wrangler dev` the AI binding proxies to the
+# REAL API and bills the account. Flip to "false" only deliberately, with Steven in-session.
 # Workspace's D1 is bound read-only in wrangler config (binding WORKSPACE_DB → skills-foundry-db),
 # not via an env var. See design §4.
 
@@ -273,7 +285,11 @@ Never commit `.env`. Confirm `.gitignore` before first commit.
 - [x] **UI look and feel**: vendored snapshot of Workspace's design tokens + `ui.tsx`, own
   `AppShell`, drift test as the guard — not a shared package (Clarion is read-only on
   `skills-foundry`). See §14. (2026-07-15)
-- [ ] Recording consent / prompts — jurisdiction rules are a product decision (Steven owns). Code exposes a per-org toggle + per-number announcement; defaults TBD.
+- [x] Recording consent / prompts — **decided 2026-07-16 (Steven): recording is off by
+  default (`cc_org_settings.recording_enabled DEFAULT 0` — the default is DDL); enabling it
+  forces the caller announcement (no separate toggle, silent recording impossible); the
+  wording is per-org (`announcement_text`, NULL ⇒ code default).** Pinned by the
+  consent-invariant test in `test/voice-route.test.ts`.
 - [ ] Mint a **`clarion` AuthPak service client** if/when server-to-server AuthPak calls are needed (change request). Not needed for v0.1.
 - [ ] Extract a shared `@foundry/ui` package once Workspace opts in — until then the design
   system stays a vendored snapshot guarded by a drift test (§14).

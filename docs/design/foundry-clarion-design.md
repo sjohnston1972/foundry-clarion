@@ -218,7 +218,8 @@ All Clarion tables are prefixed `cc_`. `organization_id` and `user_id` are **TEX
 | `cc_ivr_flows` | Studio flow references | `id` PK, `organization_id`, `name`, `twilio_flow_sid`, `definition_json` |
 | `cc_numbers` | Provisioned Twilio numbers | `id` PK, `organization_id`, `e164`, `twilio_number_sid`, `assigned_kind`, `assigned_id` |
 | `cc_calls` | Call log for reporting | `id` PK, `organization_id`, `twilio_call_sid`, `from_e164`, `to_e164`, `queue_id`, `agent_id`, `disposition`, `duration_s`, `started_at` |
-| `cc_recordings` | Recording metadata (audio in R2) | `id` PK, `call_id`, `r2_key`, `duration_s`, `transcript_r2_key`, `created_at` |
+| `cc_org_settings` | Per-org recording settings — recording **off by default** (DDL, not app logic); announcement wording per-org, NULL ⇒ code default | `organization_id` PK, `recording_enabled` (DEFAULT 0), `announcement_text`, `updated_at` |
+| `cc_recordings` | Recording metadata (audio in R2) — org-scoped by column (Phase 4 spec §3: CLAUDE.md §6 requires every row org-scoped, and it makes the cross-tenant leak test a direct assertion rather than a join) | `id` PK, `organization_id`, `call_id`, `twilio_recording_sid`, `r2_key`, `duration_s`, `transcript_r2_key`, `transcript_status` (`pending`/`done`/`failed`/`skipped`), `created_at`, UNIQUE(`organization_id`,`twilio_recording_sid`) |
 | `cc_audit_log` | Who changed what (mirror Workspace's audit table) | `id` PK, `organization_id`, `user_id`, `action`, `meta_json`, `created_at` |
 
 **Read-only Workspace binding:** `wrangler.jsonc` binds `skills-foundry-db` as a second D1
@@ -409,7 +410,7 @@ member list, so this is deferred, not blocking.**
 | **1 — Auth spine** | `verifyFoundrySession` middleware; `cc_org_directory` + `cc_members` + Clarion-role resolution/bootstrap; `GET /api/auth-status`; SPA gate (logged-out / no-access / in). | — |
 | **2 — Agents, skills & realtime spine** | `WORKSPACE_DB` read-only binding; enable-as-agent flow (pick a Workspace resource by email, snapshot skills into `cc_agent_skills`); `cc_agents`/`cc_skills`; **mints Twilio Access Tokens**; **per-org Durable Object (`ClarionRealtime`) stood up** for presence; browser softphone registers (no live inbound yet). | Twilio API Key env (§10); **create TaskRouter Workspace** (your OK). |
 | **3 — Queues & inbound calls** | `cc_queues`/`cc_queue_members`, TaskRouter Workflows, inbound TwiML + status webhooks → org's DO → live agent state; reservation → softphone → wrap-up → `cc_calls`. | **Buy a number / create Workflow** (your OK). |
-| **4 — Recording & reporting** | R2 recording capture + `cc_recordings`, transcripts, reporting views. | Recording-consent product decision (yours). |
+| **4 — Recording & reporting** | R2 recording capture + `cc_recordings`, transcripts, reporting views. | ~~Recording-consent product decision (yours).~~ **Gate CLEARED 2026-07-16 (Steven):** recording off by default; enabling it forces the caller announcement (no separate toggle); wording per-org. See `docs/superpowers/specs/2026-07-16-phase-4-recording-reporting-design.md` §1. |
 | **5 — Supervisor & outbound** | Live wallboard on the DO stream, monitor/whisper/barge, click-to-call outbound. | — |
 
 Phases 0–1 are specified to executable, test-first detail in the companion plan. Phases 2+
