@@ -267,3 +267,41 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx playwright test` → 8/8 (all specs). Gate exits 0 (104/104 tests,
   typecheck, lint, build).
 - Commit `a03bbd4`, pushed to origin (`6f438d3..a03bbd4`).
+
+## 2026-07-17 03:38 — Step 12 done: Reports page (tiles, filters, playback, transcript)
+
+- `src/pages/Reports.tsx` (new, routed at `/reports`; `AppShell` nav entry for
+  supervisor+ — the `adminOnly` flag became a `minRole` rank so Reports and Settings share
+  one mechanism): vendored primitives throughout. Four `Stat` tiles
+  (total/answered/abandoned/avg duration, total accented); a filterable call list —
+  from/to `datetime-local` inputs, queue + agent `<select>`s fed by the existing
+  `/api/queues` and `/api/agents`, disposition select, clear-filters button; `.tabular`
+  for SIDs and durations; per-call detail card with `<audio controls>` sourced from
+  `/api/recordings/:id/media` and a transcript panel keyed off `transcript_status` —
+  `pending` ⇒ `Spinner`, `failed`/`skipped` ⇒ `ErrorState`, `done` ⇒ the text fetched from
+  the transcript endpoint (raw R2 JSON, no envelope). **No empty box for a failed
+  transcript**, per the plan.
+- **Small API addition the step implies**: nothing exposed a call's recordings, and the
+  page needs recording ids for media/transcript URLs. Added
+  `GET /api/recordings?callId=` to the existing recordings router
+  (`requireClarionRole('supervisor')`, org-scoped via `listRecordingsForCall` — the
+  accessor Step 1 built for exactly this consumer). Not new invented surface beyond the
+  step's needs; covered by tests (listing, cross-org callId ⇒ `[]`, agent ⇒ 403, missing
+  callId ⇒ 400) in `test/recordings-route.test.ts` (now 6 tests).
+- `test/e2e/reports-page.spec.ts`: seeds **through the real API surface** — the signed
+  Twilio webhooks, signatures computed with the server's own `computeTwilioSignature`
+  (imported into the spec; token read from `.dev.vars`) over the worker-origin URL, no
+  DB writes. Status webhook creates the call (completed, 42s); recording webhook lands the
+  dry-run bytes in R2 + the `cc_recordings` row, and `waitUntil` transcription completes
+  (dry-run stub). UI assertions: tiles equal the **live API summary** (robust to data
+  accumulated across reruns while still proving UI ↔ API wiring), the seeded row (unique
+  SID per run) opens, `<audio src>` matches `/api/recordings/<uuid>/media`, and
+  `[dry-run transcript]` renders. Screenshot to
+  `docs/runs/2026-07-16-phase-4-recording/step-12-reports.png` (viewed: tiles
+  Total 1 / Answered 0 / Abandoned 1 / Avg 42s, filter bar, call row, detail card with
+  `done` badge, audio player, transcript text).
+- Housekeeping: restored the Phase 3 + step-11 archived screenshots the full-suite rerun
+  re-captured, as in prior steps.
+- Verified: `npx playwright test` → 9/9. Gate exits 0 (105/105 tests, typecheck, lint,
+  build). No live Twilio or Workers AI call (both rails intact; seeding used dry-run paths).
+- Commit `61df3a7`, pushed to origin (`8619326..61df3a7`).
