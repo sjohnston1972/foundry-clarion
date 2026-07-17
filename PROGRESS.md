@@ -50,3 +50,26 @@ with no terminal exit for rule 4 (10 tests). Full suite green: 31 files,
 127 tests. `npm run typecheck:server` clean. Committed as a233872 and
 pushed to `feat/ivr-builder`.
 Next: Step 4 — interpreter core (`server/lib/ivr/interpret.ts`).
+
+### 2026-07-17 — Step 4 done: interpreter core
+
+Added `server/lib/ivr/interpret.ts` — pure `interpret(flow, nodeId, vars, input)`,
+no D1/Twilio I/O. Design note not fully pinned by the spec: everything the
+walk needs from its environment (injected `now`, a `buildGatherActionUrl`
+callback, `queueWorkflowSids` map, pre-built `enqueueTaskXml`, and
+`recordingConsentSay`) arrives via the 4th `input` param, since a truly pure
+function can't fetch a queue's workflow SID or build a URL containing
+orgId/flowId itself — those will be supplied by the Step 5 webhook. A
+`first`-node flag distinguishes "resuming the exact waiting node the
+caller asked about" (consumes `input.digits`) from "freshly reaching a
+menu/collect later in the same walk" (emits a new Gather and stops) —
+this is what makes invalid/timeout re-prompts and multi-menu flows work
+without ambiguity. businessHours uses `Intl.DateTimeFormat` per-timezone
+(no eval, no external tz library); day convention documented as JS
+`getDay()` (0=Sun..6=Sat) since the spec's single example didn't pin it.
+`test/ivr-interpret.test.ts` (11 tests) covers every node type, menu
+digit/timeout/invalid, collect-stores-var, the vars round-trip across two
+calls, businessHours open/closed with injected `now`, and the MAX_STEPS=50
+loop guard. Full suite green: 32 files, 138 tests. `npm run typecheck:server`
+clean. Committed as 3d53891 and pushed to `feat/ivr-builder`.
+Next: Step 5 — interpreter webhook (`server/routes/ivr-voice.ts`).
