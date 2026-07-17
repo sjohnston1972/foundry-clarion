@@ -7,6 +7,7 @@ import Queues from './pages/Queues'
 import Wallboard from './pages/Wallboard'
 import Settings from './pages/Settings'
 import Reports from './pages/Reports'
+import IvrFlows from './pages/IvrFlows'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="softphone" element={<Softphone />} />
           <Route path="agents" element={<Agents />} />
           <Route path="queues" element={<Queues />} />
+          <Route path="ivr" element={<IvrFlows />} />
           <Route path="wallboard" element={<Wallboard />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />

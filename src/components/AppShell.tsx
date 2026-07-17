@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom'
 import type { ComponentType } from 'react'
-import { Phone, Users, ListOrdered, LayoutDashboard, BarChart3, Settings } from 'lucide-react'
+import { Phone, Users, ListOrdered, LayoutDashboard, BarChart3, Settings, Workflow } from 'lucide-react'
 import type { AuthStatus } from '../lib/session'
 import { cn } from '../lib/utils'
 
@@ -17,6 +17,7 @@ const NAV: Array<{ to: string; label: string; icon: ComponentType<{ className?: 
   { to: '/', label: 'Softphone', icon: Phone, end: true },
   { to: '/agents', label: 'Agents', icon: Users },
   { to: '/queues', label: 'Queues', icon: ListOrdered },
+  { to: '/ivr', label: 'IVR flows', icon: Workflow, minRole: 'supervisor' },
   { to: '/wallboard', label: 'Wallboard', icon: LayoutDashboard },
   { to: '/reports', label: 'Reports', icon: BarChart3, minRole: 'supervisor' },
   { to: '/settings', label: 'Settings', icon: Settings, minRole: 'admin' },
