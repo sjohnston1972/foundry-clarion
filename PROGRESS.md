@@ -190,3 +190,43 @@ matching the list API's own role gate) and route `/ivr` in `App.tsx`.
 "chunk >500kB" advisory warning, not an error). Committed as d096fef and
 pushed to `feat/ivr-builder`.
 Next: Step 11 — editor canvas (`src/pages/IvrEditor.tsx`).
+
+### 2026-07-17 — Step 11 done: editor canvas
+
+Notable infrastructure move first: extracted the graph model to
+`shared/ivr/graph.ts`, with `server/lib/ivr/graph.ts` now a thin
+re-export shim. This repo already had `@shared/*` wired in
+`tsconfig.app.json`, `tsconfig.server.json`, and `vite.config.ts` —
+provisioned for exactly this, just unused until now — so the client
+editor and the server interpreter share one type definition instead of
+a hand-kept duplicate (unlike Step 12's validate.ts, which the spec
+explicitly wants "mirrored" as a deliberate logic copy; types have no
+such duplication cost). Verified zero regressions: full backend suite
+(167 tests) and `typecheck:server` still green after the move.
+
+Built `src/components/ivr/nodeMeta.ts` (per-type label/icon/accent/
+default-config/summary + `branchOptionsFor()` mapping a node type to its
+outgoing branch names), `IvrCanvasNode.tsx` (one renderer shared by all
+9 types via IvrEditor's `nodeTypes` map, Clarion-token styled, terminal
+types get no outgoing handle), `ConfigPanel.tsx` (right-rail form bound
+to the selected node's config, switching field sets on node type; a
+selected edge instead gets a branch selector, fixed to "next" when the
+source type has no branch options), and `src/pages/IvrEditor.tsx` (the
+canvas: palette with Start disabled once one exists, drag-to-connect
+edges defaulting to the source type's first branch option, selection
+wired to the panel, delete, Save -> PUT serializing back to
+`IvrFlowDefinition` with `entryNodeId` derived from whichever node is
+type `start`). Route `/ivr/:id` added; `IvrFlows.tsx` rows now link into
+the editor (they didn't in Step 10, deliberately, since the page didn't
+exist yet).
+
+Caught three bugs during review before committing: the routeToQueue
+config field wasn't actually mapping the `queues` prop into `<option>`s
+(dead dropdown), a leftover `sourceType` variable in the edge panel that
+looked load-bearing but was never used, and an unsafe non-null-checked
+cast in the menu-branch lookup. `npm run build` and `npm run lint` both
+clean; no unit-test harness for steps 10-13 per the plan's own notes —
+build/typecheck is the gate here, the simulator (Step 13) is the manual
+drive.
+Next: Step 12 — client validation (mirror `server/lib/ivr/validate.ts`,
+surface failures inline, block Save on invalid).
