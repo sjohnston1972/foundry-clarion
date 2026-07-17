@@ -230,3 +230,29 @@ build/typecheck is the gate here, the simulator (Step 13) is the manual
 drive.
 Next: Step 12 — client validation (mirror `server/lib/ivr/validate.ts`,
 surface failures inline, block Save on invalid).
+
+### 2026-07-17 — Step 12 done: client validation
+
+Added `src/lib/ivr/validate.ts` — a deliberate hand-kept copy of the 5
+rules in `server/lib/ivr/validate.ts`, following through on the Step 11
+distinction: graph *types* are genuinely shared via `shared/ivr/graph.ts`
+(no reason to duplicate, no drift risk), but the rule *logic* stays
+mirrored per the design spec's explicit "mirrored in the client" wording
+— client-side validation runs live on every keystroke/drag and may
+reasonably want to diverge from the server's save-time gate later (e.g.
+softer warnings vs. hard errors). Both copies only import graph types
+from `@shared/ivr/graph`, so there's exactly one place a rule change
+needs to land in each copy, not a scattered type definition too.
+
+Wired into `src/pages/IvrEditor.tsx`: `validateFlow(fromFlow(nodes,
+edges), {queueIds})` recomputes via `useMemo` on every node/edge/queues
+change, every failing rule renders inline in a small panel next to Save,
+and the Save button disables while invalid — so the server's own
+re-validation on PUT (Step 7) should never actually reject anything in
+normal use; it stays as defense-in-depth.
+
+`npm run build` and `npm run lint` clean. Full backend suite (167 tests)
+and `typecheck:server` unaffected (no server files touched). Committed
+as cc6456d and pushed to `feat/ivr-builder`.
+Next: Step 13 — in-browser simulator (a "Test" panel walking the flow
+client-side, no telephony).
