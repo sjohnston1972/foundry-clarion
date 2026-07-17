@@ -7,6 +7,8 @@ import {
   addQueueMember, removeQueueMember, listQueueMembers,
 } from '../db/queues'
 import { createWorkflow } from '../lib/twilio/provisioning'
+import { isQueueStrategy, DEFAULT_QUEUE_STRATEGY } from '../lib/queues/strategies'
+import { insertAuditLog } from '../db/audit'
 
 export const queues = new Hono<Env>()
 
@@ -34,7 +36,11 @@ queues.post('/', requireClarionRole('admin'), async (c) => {
   try { body = await c.req.json() } catch { return err(c, 'bad_json', 'Invalid JSON body', 400) }
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return err(c, 'bad_input', 'name is required', 400)
-  const strategy = typeof body.strategy === 'string' && body.strategy ? body.strategy : 'longest-idle'
+  let strategy = DEFAULT_QUEUE_STRATEGY
+  if (body.strategy !== undefined) {
+    if (!isQueueStrategy(body.strategy)) return err(c, 'bad_input', 'unknown strategy', 400)
+    strategy = body.strategy
+  }
 
   const workflow = await createWorkflow(c.env, { orgId, friendlyName: name, configuration: {} })
 
@@ -53,8 +59,14 @@ queues.patch('/:id', requireClarionRole('admin'), async (c) => {
   try { body = await c.req.json() } catch { return err(c, 'bad_json', 'Invalid JSON body', 400) }
   const patch: { name?: string; strategy?: string } = {}
   if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim()
-  if (typeof body.strategy === 'string' && body.strategy) patch.strategy = body.strategy
+  if (body.strategy !== undefined) {
+    if (!isQueueStrategy(body.strategy)) return err(c, 'bad_input', 'unknown strategy', 400)
+    patch.strategy = body.strategy
+  }
   await updateQueue(c.env.DB, orgId, existing.id, patch)
+  if (patch.strategy) {
+    await insertAuditLog(c.env.DB, { organizationId: orgId, userId: c.get('user')?.id ?? null, action: 'queue.strategy', meta: { queueId: existing.id, strategy: patch.strategy } })
+  }
   return c.json({ success: true, data: await getQueueById(c.env.DB, orgId, existing.id) })
 })
 
@@ -65,6 +77,7 @@ queues.delete('/:id', requireClarionRole('admin'), async (c) => {
   const existing = await getQueueById(c.env.DB, orgId, c.req.param('id'))
   if (!existing) return err(c, 'not_found', 'Queue not found', 404)
   await deleteQueue(c.env.DB, orgId, existing.id)
+  await insertAuditLog(c.env.DB, { organizationId: orgId, userId: c.get('user')?.id ?? null, action: 'queue.delete', meta: { queueId: existing.id, name: existing.name } })
   return c.json({ success: true, data: { id: existing.id } })
 })
 

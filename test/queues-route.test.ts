@@ -16,7 +16,9 @@ import { createApp } from '../server/app'
 function fakeDb(clarionRole: 'agent' | 'supervisor' | null) {
   const queues: Record<string, unknown>[] = []
   const members: Record<string, unknown>[] = []
-  return {
+  const audits: { action: string; meta: string }[] = []
+  const db = {
+    __audits: audits,
     prepare(sql: string) {
       return {
         bind: (...a: unknown[]) => ({
@@ -32,18 +34,18 @@ function fakeDb(clarionRole: 'agent' | 'supervisor' | null) {
             return { results: [] }
           },
           async run() {
-            if (sql.startsWith('INSERT INTO cc_queues')) {
-              queues.push({ id: a[0], organization_id: a[1], name: a[2], twilio_workflow_sid: a[3], strategy: a[4] })
-            }
-            if (sql.startsWith('INSERT INTO cc_queue_members')) {
-              members.push({ queue_id: a[0], agent_id: a[1], priority: a[2] })
-            }
+            if (sql.startsWith('INSERT INTO cc_queues')) queues.push({ id: a[0], organization_id: a[1], name: a[2], twilio_workflow_sid: a[3], strategy: a[4] })
+            if (sql.startsWith('INSERT INTO cc_queue_members')) members.push({ queue_id: a[0], agent_id: a[1], priority: a[2] })
+            if (sql.startsWith('UPDATE cc_queues SET strategy')) { const q = queues.find((x) => x.organization_id === a[1] && x.id === a[2]); if (q) q.strategy = a[0] }
+            if (sql.startsWith('DELETE FROM cc_queues')) { const i = queues.findIndex((x) => x.organization_id === a[0] && x.id === a[1]); if (i >= 0) queues.splice(i, 1) }
+            if (sql.startsWith('INSERT INTO cc_audit_log')) audits.push({ action: String(a[2]), meta: String(a[3]) })
             return {}
           },
         }),
       }
     },
-  } as unknown as D1Database
+  }
+  return db as unknown as D1Database & { __audits: { action: string; meta: string }[] }
 }
 
 const env = (clarionRole: 'agent' | 'supervisor' | null) => ({ DB: fakeDb(clarionRole), AUTH_ENFORCE: 'true', TWILIO_DRY_RUN: 'true' })
@@ -100,5 +102,64 @@ describe('queues route — create (dry-run)', () => {
       body: JSON.stringify({ name: '' }),
     }, env(null))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('queues route — strategy validation + audit', () => {
+  it('rejects an unknown strategy on create', async () => {
+    const res = await createApp().request('/api/queues', {
+      method: 'POST', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Support', strategy: 'nonsense' }),
+    }, env(null))
+    expect(res.status).toBe(400)
+  })
+  it('accepts a valid strategy on create and persists it', async () => {
+    const res = await createApp().request('/api/queues', {
+      method: 'POST', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Sales', strategy: 'ring-all' }),
+    }, env(null))
+    expect(res.status).toBe(201)
+    expect((await res.json()).data.strategy).toBe('ring-all')
+  })
+  it('rejects an unknown strategy on patch', async () => {
+    const e = env(null)
+    const create = await createApp().request('/api/queues', {
+      method: 'POST', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Support' }),
+    }, e)
+    const id = (await create.json()).data.id
+    const res = await createApp().request(`/api/queues/${id}`, {
+      method: 'PATCH', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ strategy: 'nope' }),
+    }, e)
+    expect(res.status).toBe(400)
+  })
+  it('changes strategy on patch and writes a queue.strategy audit row', async () => {
+    const e = env(null)
+    const create = await createApp().request('/api/queues', {
+      method: 'POST', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Support' }),
+    }, e)
+    const id = (await create.json()).data.id
+    const res = await createApp().request(`/api/queues/${id}`, {
+      method: 'PATCH', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ strategy: 'priority' }),
+    }, e)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data.strategy).toBe('priority')
+    expect((e.DB as unknown as { __audits: { action: string }[] }).__audits.map((x) => x.action)).toContain('queue.strategy')
+  })
+  it('writes a queue.delete audit row and cross-org delete is 404', async () => {
+    const e = env(null)
+    const create = await createApp().request('/api/queues', {
+      method: 'POST', headers: { cookie: 'fnd_session=admin', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Support' }),
+    }, e)
+    const id = (await create.json()).data.id
+    const del = await createApp().request(`/api/queues/${id}`, { method: 'DELETE', headers: { cookie: 'fnd_session=admin' } }, e)
+    expect(del.status).toBe(200)
+    expect((e.DB as unknown as { __audits: { action: string }[] }).__audits.map((x) => x.action)).toContain('queue.delete')
+    const again = await createApp().request(`/api/queues/${id}`, { method: 'DELETE', headers: { cookie: 'fnd_session=admin' } }, e)
+    expect(again.status).toBe(404)
   })
 })
