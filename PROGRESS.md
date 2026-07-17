@@ -120,3 +120,26 @@ voicemail. Full suite green: 33 files, 150 tests. `npm run
 typecheck:server` clean. Committed as 4cbe543 and pushed to
 `feat/ivr-builder`.
 Next: Step 7 — flow CRUD API (`server/routes/ivr.ts`).
+
+### 2026-07-17 — Step 7 done: flow CRUD API
+
+Added `server/routes/ivr.ts`, mounted at `/api/ivr` in `server/app.ts`:
+list/get (supervisor+), create/put/delete (admin), org-scoped, cross-org
+-> 404 throughout. POST creates an empty starter graph (one Start node)
+unvalidated by design — it has no terminal path yet, and the spec scopes
+validation to PUT. Design call beyond the spec's literal text: PUT
+re-validates whenever a new `definition` is supplied, AND whenever the
+resulting `status` would be `'active'` even with no `definition` in the
+body (re-validating the flow's existing stored definition in that case)
+— closes a gap where `PUT {status:'active'}` alone could otherwise flip
+an already-invalid flow live without ever running validate.ts. Invalid
+-> 400 with the failing rule(s) joined into the message. DELETE writes
+an `ivr.delete` audit entry via the existing `cc_audit_log` table.
+`test/ivr-route.test.ts` (12 tests, mirrors `queues-route.test.ts` /
+`recordings-route.test.ts`) covers role gates, starter-graph create,
+empty-name rejection, cross-org 404 on get/put/delete, valid/invalid
+definition saves, the active-revalidates-existing-definition case, and
+the delete audit entry. Full suite green: 34 files, 162 tests. `npm run
+typecheck:server` clean. Committed as 9585e01 and pushed to
+`feat/ivr-builder`.
+Next: Step 8 — voicemail read API (list + media endpoints).
