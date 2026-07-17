@@ -9,6 +9,7 @@ import { token } from './routes/token'
 import { realtime } from './routes/realtime'
 import { queues } from './routes/queues'
 import { voice } from './routes/voice'
+import { ivrVoice } from './routes/ivr-voice'
 import { settings } from './routes/settings'
 import { reports } from './routes/reports'
 import { recordings } from './routes/recordings'
@@ -37,6 +38,7 @@ export function createApp() {
   // Twilio-called webhooks, not browser-called: outside the AuthPak gate entirely.
   // Trust is established per-request via X-Twilio-Signature (server/lib/twilio/signature.ts).
   app.route('/voice', voice)
+  app.route('/voice', ivrVoice)
 
   // Public routing probe for the SPA gate (never 401s).
   app.get('/auth-status', async (c) => {
