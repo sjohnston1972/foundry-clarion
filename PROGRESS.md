@@ -143,3 +143,20 @@ the delete audit entry. Full suite green: 34 files, 162 tests. `npm run
 typecheck:server` clean. Committed as 9585e01 and pushed to
 `feat/ivr-builder`.
 Next: Step 8 — voicemail read API (list + media endpoints).
+
+### 2026-07-17 — Step 8 done: voicemail read API
+
+Added `GET /api/ivr/voicemails` (list, supervisor+) and
+`GET /api/ivr/voicemails/:id/media` (stream audio from R2, supervisor+)
+to `server/routes/ivr.ts`, mirroring `recordings.ts`'s pattern exactly:
+cross-org id -> 404 never 403, missing R2 object -> 404 even with a
+valid row, `private, no-store` cache-control. Deliberately did not add a
+transcript endpoint — the plan's Step 8 scope says "list + media
+endpoints" only, so that wasn't built here (recordings has one; a
+follow-up run can add the voicemail equivalent if wanted).
+`test/ivr-route.test.ts` gained 5 cases (17 total): role gates, a
+supervisor listing and streaming media, cross-org 404, a list scoped to
+the caller's own org, and a missing-R2-object 404. Full suite green: 34
+files, 167 tests. `npm run typecheck:server` clean. Committed as
+8e8416f and pushed to `feat/ivr-builder`.
+Next: Step 9 — backend gate (full suite + typecheck + lint).
