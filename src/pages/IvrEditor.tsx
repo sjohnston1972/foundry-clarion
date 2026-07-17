@@ -11,6 +11,7 @@ import { IvrCanvasNode, type IvrCanvasNodeData } from '../components/ivr/IvrCanv
 import { ConfigPanel, type Selection } from '../components/ivr/ConfigPanel'
 import { NODE_META, NODE_TYPES, branchOptionsFor } from '../components/ivr/nodeMeta'
 import { fetchJson } from '../lib/api'
+import { validateFlow } from '../lib/ivr/validate'
 import type { IvrFlowDefinition, IvrNode, IvrNodeType } from '@shared/ivr/graph'
 
 type IvrFlow = { id: string; name: string; status: 'draft' | 'active'; definition: IvrFlowDefinition; updatedAt: number }
@@ -59,6 +60,14 @@ function IvrEditorCanvas({ flow, queues }: { flow: IvrFlow; queues: Queue[] }) {
   const [selection, setSelection] = useState<Selection>(null)
 
   const hasStart = nodes.some((n) => n.type === 'start')
+
+  // Live client-side validation — mirrors server/lib/ivr/validate.ts (see
+  // src/lib/ivr/validate.ts). Recomputed on every node/edge/queues change; Save is
+  // blocked while invalid so the server-side re-validation on PUT should never fire.
+  const validation = useMemo(
+    () => validateFlow(fromFlow(nodes, edges), { queueIds: queues.map((q) => q.id) }),
+    [nodes, edges, queues],
+  )
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -174,12 +183,26 @@ function IvrEditorCanvas({ flow, queues }: { flow: IvrFlow; queues: Queue[] }) {
         />
       </aside>
 
-      <div className="absolute right-6 top-6 flex items-center gap-2">
-        {saveMutation.isError && <p className="text-sm text-rose-600">{(saveMutation.error as Error).message}</p>}
-        {saveMutation.isSuccess && <span className="text-sm text-emerald-600">Saved</span>}
-        <Button variant="primary" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-          Save
-        </Button>
+      <div className="absolute right-6 top-6 flex flex-col items-end gap-2">
+        {!validation.valid && (
+          <div className="max-w-sm rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+            <div className="font-medium">
+              {validation.errors.length} issue{validation.errors.length === 1 ? '' : 's'} to fix before saving
+            </div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {validation.errors.map((message, i) => (
+                <li key={i}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          {saveMutation.isError && <p className="text-sm text-rose-600">{(saveMutation.error as Error).message}</p>}
+          {saveMutation.isSuccess && <span className="text-sm text-emerald-600">Saved</span>}
+          <Button variant="primary" disabled={!validation.valid || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            Save
+          </Button>
+        </div>
       </div>
     </div>
   )
