@@ -30,7 +30,10 @@ function fakeDb(clarionRole: 'agent' | 'supervisor' | null) {
             return null
           },
           async run() { return {} },
-          async all() { return { results: [] } },
+          async all() {
+            if (sql.includes('FROM cc_recordings')) return { results: RECORDINGS.filter((r) => r.organization_id === a[0] && r.call_id === a[1]) }
+            return { results: [] }
+          },
         }),
       }
     },
@@ -81,6 +84,21 @@ describe('recordings routes — media + transcript', () => {
   it('a pending transcript is a 404', async () => {
     const res = await get('/api/recordings/rec2/transcript', 'fnd_session=supervisor')
     expect(res.status).toBe(404)
+  })
+
+  it('lists a call\'s recordings for a supervisor; cross-org callId yields []', async () => {
+    const own = await get('/api/recordings?callId=c1', 'fnd_session=supervisor')
+    expect(own.status).toBe(200)
+    const rows = (await own.json()).data
+    expect(rows.length).toBe(1)
+    expect(rows[0]).toMatchObject({ id: 'rec1', transcriptStatus: 'done' })
+
+    const crossOrg = await get('/api/recordings?callId=c1', 'fnd_session=supervisor-b')
+    expect(crossOrg.status).toBe(200)
+    expect((await crossOrg.json()).data).toEqual([])
+
+    expect((await get('/api/recordings?callId=c1', 'fnd_session=agent', 'agent')).status).toBe(403)
+    expect((await get('/api/recordings', 'fnd_session=supervisor')).status).toBe(400)
   })
 
   it('a done transcript returns the JSON with private no-store', async () => {

@@ -2,11 +2,22 @@ import { Hono } from 'hono'
 import type { Env } from '../types'
 import { err } from '../lib/http'
 import { requireClarionRole } from '../lib/auth'
-import { getRecordingById } from '../db/recordings'
+import { getRecordingById, listRecordingsForCall } from '../db/recordings'
 
 // Recorded audio is the most sensitive data Clarion holds: supervisor+ only, and a
 // cross-org read returns 404, never 403 — a 403 would confirm the id exists.
 export const recordings = new Hono<Env>()
+
+// GET /api/recordings?callId=... — a call's recording metadata (supervisor+). The
+// Reports page needs recording ids to source media/transcript; listRecordingsForCall
+// exists for exactly this consumer (org-scoped, cross-org callIds yield []).
+recordings.get('/', requireClarionRole('supervisor'), async (c) => {
+  const orgId = c.get('organizationId')
+  if (!orgId) return err(c, 'no_org', 'No organization in session', 400)
+  const callId = c.req.query('callId')
+  if (!callId) return err(c, 'bad_input', 'callId is required', 400)
+  return c.json({ success: true, data: await listRecordingsForCall(c.env.DB, orgId, callId) })
+})
 
 // GET /api/recordings/:id/media — stream the audio from R2 (supervisor+).
 recordings.get('/:id/media', requireClarionRole('supervisor'), async (c) => {
