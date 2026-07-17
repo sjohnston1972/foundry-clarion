@@ -256,3 +256,44 @@ and `typecheck:server` unaffected (no server files touched). Committed
 as cc6456d and pushed to `feat/ivr-builder`.
 Next: Step 13 — in-browser simulator (a "Test" panel walking the flow
 client-side, no telephony).
+
+### 2026-07-17 — Step 13 done: in-browser simulator
+
+Added `src/lib/ivr/simulate.ts` — a client-only walker, deliberately
+NOT a reuse of `server/lib/ivr/interpret.ts`: there's no real Twilio
+call in a browser preview, so there's no action URL to build, no queue
+workflow SID to resolve, no recording-consent `<Say>`. It mirrors
+interpret.ts's walk-until-you-must-wait *shape* (the same first-node
+resume logic that distinguishes "resuming the exact waiting node" from
+"freshly reaching a menu/collect later in the same walk," the same
+node-type switch, the same MAX_STEPS=50 guard) adapted for zero I/O:
+`businessHours` branches on a manual "after hours" toggle instead of a
+real clock; `routeToQueue`/`voicemail`/`Gather` emit illustrative TwiML
+without real callback URLs. A third mirror alongside Step 12's
+validate.ts — same rationale: this one runs entirely client-side with
+no server counterpart to import from.
+
+`src/components/ivr/SimulatorPanel.tsx`: the "Test" panel — start a
+test call, press menu keys or simulate a timeout, submit collect
+digits, toggle after-hours, a live TwiML-so-far preview, and an
+accumulating set of visited node/edge ids reported to the parent via
+`onHighlight`.
+
+`src/pages/IvrEditor.tsx`: the right rail is now tabbed (Inspector |
+Test). The simulator walks the *live in-editor* definition
+(`fromFlow(nodes, edges)`), not the last-saved copy, so testing doesn't
+require saving first. Path highlighting needed zero changes to the
+custom node/edge renderers — `Node`/`Edge` `style` is applied by
+ReactFlow to its own wrapper elements around whatever custom component
+you register, so a derived `displayNodes`/`displayEdges` pair (kept
+separate from the `nodes`/`edges` edit-state source of truth passed to
+`onNodesChange`/`onEdgesChange`) was enough.
+
+`npm run build` and `npm run lint` clean. Full backend suite (167
+tests) and `typecheck:server` unaffected (no server files touched).
+Committed as 33ba7bf and pushed to `feat/ivr-builder`.
+
+This closes the frontend arc (Steps 10-13). Next: Step 14 — docs +
+final gate + close (update CLAUDE.md §7/§6 and the design doc, run the
+full gate, then archive PLAN/PROGRESS and write DONE per the run-ending
+discipline).
