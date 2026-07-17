@@ -95,3 +95,28 @@ exercises the URL-building code path. Full suite green: 33 files, 146
 tests. `npm run typecheck:server` clean. Committed as dcffa1c and pushed
 to `feat/ivr-builder`.
 Next: Step 6 — voicemail callback (`POST /api/voice/voicemail`).
+
+### 2026-07-17 — Step 6 done: voicemail callback
+
+Added `POST /api/voice/voicemail?orgId=&flowId=&callSid=` to
+`server/routes/ivr-voice.ts` — the voicemail node's Record action/
+recordingStatusCallback, signature-validated, non-'completed' status is
+a 204 no-op (mirrors the Phase 4 `/recording` handler shape). Writes
+audio to R2 at `orgs/{org}/voicemails/{callSid}/{recSid}.mp3`, inserts a
+`cc_voicemails` row, hands transcription to `waitUntil`. Added
+`setVoicemailTranscript` (`server/db/voicemails.ts`) and
+`transcribeVoicemail` (`server/lib/ai/transcribe.ts`, reuses
+`transcribeAudio`'s dry-run-gated Whisper call but writes to
+`cc_voicemails` instead of `cc_recordings`) to close the loop. Design
+call: `flow_id` is best-effort (nullable, `ON DELETE SET NULL`) — an
+unknown/cross-org `flowId` stores the voicemail anyway with `flow_id`
+null rather than failing the whole callback, since the audio capture
+matters more than the flow attribution. `test/ivr-voice.test.ts` gained
+4 cases (12 total in the file): signature required, non-completed
+no-op, a completed callback writing R2 + row + handing off transcription
+(verified by awaiting the handed-off promise, same pattern as
+`voice-route.test.ts`), and an unknown flowId still storing the
+voicemail. Full suite green: 33 files, 150 tests. `npm run
+typecheck:server` clean. Committed as 4cbe543 and pushed to
+`feat/ivr-builder`.
+Next: Step 7 — flow CRUD API (`server/routes/ivr.ts`).
