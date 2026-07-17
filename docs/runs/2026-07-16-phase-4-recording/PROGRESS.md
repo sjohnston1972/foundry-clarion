@@ -329,3 +329,42 @@ Append one timestamped entry per completed step below. Do not rewrite history.
   `git grep -n "Recording consent / prompts" CLAUDE.md` → shows `[x]`. Gate exits 0
   (105/105 tests, typecheck, lint, build).
 - Commit `e0a8ac6`, pushed to origin (`d148893..e0a8ac6`).
+
+## 2026-07-17 08:32 — Step 14: capstone — final gate green, rails held, run closed
+
+Final gate output (tail, verbatim; the chained one-liner hit a transient exit-127 on its
+first invocation — each component was then run separately and all exited 0):
+
+```
+✅ No migrations to apply!
+
+ Test Files  28 passed (28)
+      Tests  105 passed (105)
+   Start at  08:31:09
+   Duration  8.40s
+
+> foundry-clarion@0.1.0 typecheck:server
+> tsc -p tsconfig.server.json --noEmit
+
+> foundry-clarion@0.1.0 lint
+> oxlint
+
+✓ built in 1.05s
+```
+
+Rail confirmations (verbatim):
+
+```
+$ git grep -n "TWILIO_DRY_RUN" wrangler.jsonc
+wrangler.jsonc:11:  "vars": { "AUTH_ENFORCE": "false", "TWILIO_DRY_RUN": "true", "AI_DRY_RUN": "true" },
+$ git grep -n '"AI_DRY_RUN"' wrangler.jsonc
+wrangler.jsonc:11:  "vars": { "AUTH_ENFORCE": "false", "TWILIO_DRY_RUN": "true", "AI_DRY_RUN": "true" },
+$ git grep -n "DEV_AUTH" wrangler.jsonc
+(no output — DEV_AUTH absent)
+```
+
+No live Twilio account mutation and no live Workers AI call was made at any point in this
+run; the R2 bucket exists only in Miniflare's local state. Playwright: 9/9 specs passing as
+of Step 12. Run closed per CLAUDE.md: this file and PLAN.md archived to
+`docs/runs/2026-07-16-phase-4-recording/` alongside the two step screenshots; DONE written
+as the handoff note. Every commit of this run is already on origin.
