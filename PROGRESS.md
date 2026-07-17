@@ -160,3 +160,16 @@ the caller's own org, and a missing-R2-object 404. Full suite green: 34
 files, 167 tests. `npm run typecheck:server` clean. Committed as
 8e8416f and pushed to `feat/ivr-builder`.
 Next: Step 9 — backend gate (full suite + typecheck + lint).
+
+### 2026-07-17 — Step 9 done: backend gate
+
+Verification-only step, no code changes. Ran the full gate: `npx vitest
+run` (34 files, 167 tests, all green), `npm run typecheck:server` (clean),
+`npm run lint` (oxlint, clean, zero warnings). Backend arc (Steps 1-9) is
+complete — migration, DB accessors, graph model + validation, the pure
+interpreter core, the interpreter and voicemail webhooks, the flow CRUD
+API, and the voicemail read API all in place and tested. No commit for
+this step (nothing changed in the working tree).
+Next: Step 10 — ReactFlow dep + flow list page (`src/pages/IvrFlows.tsx`).
+Frontend arc begins here; steps 10-13 are verified by `npm run build`
+(typecheck) rather than vitest, per the plan's notes.
