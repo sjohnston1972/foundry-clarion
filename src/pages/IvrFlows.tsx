@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHead, Button, Badge, EmptyState, TableSkeleton, ErrorState } from '../components/ui'
 import { fetchJson } from '../lib/api'
@@ -47,11 +48,11 @@ export default function IvrFlows() {
             <ul className="space-y-1 px-5 pb-4">
               {flowsQuery.data!.map((flow) => (
                 <li key={flow.id} className="flex items-center justify-between gap-3 border-t border-line py-3 first:border-t-0">
-                  <div>
-                    <div className="text-sm font-medium text-ink">{flow.name}</div>
+                  <Link to={`/ivr/${flow.id}`} className="min-w-0 hover:underline">
+                    <div className="truncate text-sm font-medium text-ink">{flow.name}</div>
                     <div className="tabular text-xs text-muted">Updated {new Date(flow.updatedAt).toLocaleString()}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-2">
                     <Badge tone={flow.status === 'active' ? 'accent' : 'neutral'}>{flow.status}</Badge>
                     <Button
                       size="sm"
