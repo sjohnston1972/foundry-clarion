@@ -85,3 +85,53 @@ describe('enable-as-agent', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('disable-as-agent', () => {
+  function disableDb() {
+    const agents: Record<string, unknown>[] = [{ id: 'a1', organization_id: 'o1', email: 'agent@acme.com', twilio_worker_sid: 'WKdryrun_a1', status: 'offline', activity_sid: null, user_id: null, workspace_resource_id: 'r1' }]
+    const audits: { action: string }[] = []
+    const db = {
+      __audits: audits,
+      prepare(sql: string) {
+        return { bind: (...a: unknown[]) => ({
+          async first() {
+            if (sql.includes('FROM cc_org_directory')) return { disabled: 0 }
+            if (sql.includes('FROM cc_members')) return null // owner -> admin bootstrap
+            if (sql.includes('FROM cc_agents') && sql.includes('AND id = ?')) return agents.find((x) => x.organization_id === a[0] && x.id === a[1]) ?? null
+            return null
+          },
+          async all() { return { results: agents } },
+          async run() {
+            if (sql.startsWith('DELETE FROM cc_agents')) { const i = agents.findIndex((x) => x.organization_id === a[0] && x.id === a[1]); if (i >= 0) agents.splice(i, 1) }
+            if (sql.startsWith('INSERT INTO cc_audit_log')) audits.push({ action: String(a[2]) })
+            return {}
+          },
+        }) }
+      },
+    }
+    return db as unknown as D1Database & { __audits: { action: string }[] }
+  }
+  function disableEnv() {
+    const presence: unknown[] = []
+    const REALTIME = {
+      idFromName: () => 'id',
+      get: () => ({ fetch: async (_u: string, init: { body: string }) => { presence.push(JSON.parse(init.body)); return new Response('ok') } }),
+    }
+    return { DB: disableDb(), REALTIME, __presence: presence, AUTH_ENFORCE: 'true', TWILIO_DRY_RUN: 'true' } as never
+  }
+
+  it('deletes the agent row, audits agent.disable, drops presence', async () => {
+    const e = disableEnv()
+    const res = await createApp().request('/api/agents/a1', { method: 'DELETE', headers: { cookie: 'fnd_session=owner' } }, e)
+    expect(res.status).toBe(200)
+    expect((e as unknown as { DB: { __audits: { action: string }[] } }).DB.__audits.map((x) => x.action)).toContain('agent.disable')
+    expect((e as unknown as { __presence: { identity: string; status: string }[] }).__presence[0].status).toBe('offline')
+    // second delete: gone -> 404
+    const again = await createApp().request('/api/agents/a1', { method: 'DELETE', headers: { cookie: 'fnd_session=owner' } }, e)
+    expect(again.status).toBe(404)
+  })
+  it('cross-org / unknown id is 404', async () => {
+    const res = await createApp().request('/api/agents/ghost', { method: 'DELETE', headers: { cookie: 'fnd_session=owner' } }, disableEnv())
+    expect(res.status).toBe(404)
+  })
+})

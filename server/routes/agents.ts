@@ -3,7 +3,7 @@ import type { Env } from '../types'
 import { err } from '../lib/http'
 import { requireClarionRole } from '../lib/auth'
 import { findOrgResourceByEmail, listOrgResources, getResourceSkills } from '../db/workspace'
-import { insertAgent, getAgentByEmail, listAgents, setAgentStatus, type Agent } from '../db/agents'
+import { insertAgent, getAgentByEmail, getAgentById, deleteAgent, listAgents, setAgentStatus, type Agent } from '../db/agents'
 import { snapshotAgentSkills } from '../db/skills'
 import { insertAuditLog } from '../db/audit'
 import { createWorker } from '../lib/twilio/provisioning'
@@ -85,4 +85,21 @@ agents.post('/status', requireClarionRole('agent'), async (c) => {
   await setAgentStatus(c.env.DB, orgId, agent.id, status)
   await pushPresence(c.env, orgId, { identity: agent.email, status, at: Date.now() })
   return c.json({ success: true, data: { id: agent.id, status } })
+})
+
+// DELETE /api/agents/:id — disable an enabled agent (admin). Inverse of enable.
+agents.delete('/:id', requireClarionRole('admin'), async (c) => {
+  const orgId = c.get('organizationId')
+  if (!orgId) return err(c, 'no_org', 'No organization in session', 400)
+  const agent = await getAgentById(c.env.DB, orgId, c.req.param('id'))
+  if (!agent) return err(c, 'not_found', 'Agent not found', 404) // cross-org lands here too: 404, never 403
+
+  await deleteAgent(c.env.DB, orgId, agent.id) // cc_agent_skills cascade; cc_calls.agent_id -> NULL (history kept)
+  await insertAuditLog(c.env.DB, {
+    organizationId: orgId, userId: c.get('user')?.id ?? null,
+    action: 'agent.disable', meta: { agentId: agent.id, email: agent.email },
+  })
+  // Phase 5 TODO: delete the TaskRouter Worker (agent.twilioWorkerSid) once telephony is live.
+  await pushPresence(c.env, orgId, { identity: agent.email, status: 'offline', at: Date.now() })
+  return c.json({ success: true, data: { id: agent.id } })
 })
