@@ -67,3 +67,15 @@ export async function setAgentStatus(db: D1Database, orgId: string, agentId: str
     .bind(status, orgId, agentId)
     .run()
 }
+
+export async function getAgentById(db: D1Database, orgId: string, id: string): Promise<Agent | null> {
+  const row = await db
+    .prepare(`SELECT ${COLS} FROM cc_agents WHERE organization_id = ? AND id = ?`)
+    .bind(orgId, id)
+    .first<AgentRow>()
+  return row ? toAgent(row) : null
+}
+
+export async function deleteAgent(db: D1Database, orgId: string, id: string): Promise<void> {
+  await db.prepare(`DELETE FROM cc_agents WHERE organization_id = ? AND id = ?`).bind(orgId, id).run()
+}

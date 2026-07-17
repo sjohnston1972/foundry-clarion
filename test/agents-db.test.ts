@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { insertAgent, getAgentByEmail, listAgents } from '../server/db/agents'
+import { insertAgent, getAgentByEmail, listAgents, getAgentById, deleteAgent } from '../server/db/agents'
 import { upsertSkill } from '../server/db/skills'
 
 // Minimal fake D1 backed by a plain array of "rows" per table keyed off SQL fragments.
@@ -10,9 +10,11 @@ function memDb() {
     async run() {
       if (sql.startsWith('INSERT INTO cc_agents')) agents.push({ id: args[0], organization_id: args[1], user_id: args[2], email: args[3], workspace_resource_id: args[4], twilio_worker_sid: args[5], status: 'offline', activity_sid: null })
       if (sql.startsWith('INSERT INTO cc_skills')) skills.push({ id: args[0], organization_id: args[1], name: args[2] })
+      if (sql.startsWith('DELETE FROM cc_agents')) { const i = agents.findIndex((a) => a.organization_id === args[0] && a.id === args[1]); if (i >= 0) agents.splice(i, 1) }
       return {}
     },
     async first() {
+      if (sql.includes('FROM cc_agents') && sql.includes('AND id = ?')) return agents.find((a) => a.organization_id === args[0] && a.id === args[1]) ?? null
       if (sql.includes('FROM cc_agents') && sql.includes('email')) return agents.find((a) => a.organization_id === args[0] && a.email === args[1]) ?? null
       if (sql.includes('FROM cc_skills')) return skills.find((s) => s.organization_id === args[0] && s.name === args[1]) ?? null
       return null
@@ -39,6 +41,19 @@ describe('cc_agents accessors', () => {
     await insertAgent(db, { id: 'a1', organizationId: 'o1', userId: null, email: 'ada@x.com', workspaceResourceId: null, twilioWorkerSid: null })
     expect(await getAgentByEmail(db, 'o2', 'ada@x.com')).toBeNull()
     expect((await listAgents(db, 'o2')).length).toBe(0)
+  })
+})
+
+describe('cc_agents get-by-id + delete', () => {
+  it('reads an agent by id and deletes it, org-scoped', async () => {
+    const db = memDb()
+    await insertAgent(db, { id: 'a1', organizationId: 'o1', userId: null, email: 'ada@x.com', workspaceResourceId: null, twilioWorkerSid: null })
+    expect((await getAgentById(db, 'o1', 'a1'))?.email).toBe('ada@x.com')
+    expect(await getAgentById(db, 'o2', 'a1')).toBeNull() // cross-org: not found
+    await deleteAgent(db, 'o2', 'a1') // wrong org: no-op
+    expect(await getAgentById(db, 'o1', 'a1')).not.toBeNull()
+    await deleteAgent(db, 'o1', 'a1')
+    expect(await getAgentById(db, 'o1', 'a1')).toBeNull()
   })
 })
 
