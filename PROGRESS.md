@@ -305,3 +305,27 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx playwright test` → 9/9. Gate exits 0 (105/105 tests, typecheck, lint,
   build). No live Twilio or Workers AI call (both rails intact; seeding used dry-run paths).
 - Commit `61df3a7`, pushed to origin (`8619326..61df3a7`).
+
+## 2026-07-17 03:41 — Step 13 done: documentation debt cleared
+
+- `docs/design/foundry-clarion-design.md` §4: `cc_recordings` row updated —
+  `organization_id`, `twilio_recording_sid`, `transcript_status`, the org-unique
+  constraint, and the rationale for the deliberate org-scoped deviation; `cc_org_settings`
+  row added (default-off posture as DDL). §9: Phase 4's "Gated on" cell now shows the gate
+  **CLEARED 2026-07-16** with the decision and a pointer to the Phase 4 spec §1.
+- `CLAUDE.md` §6: the same two table rows, so the standing schema table matches reality.
+- `CLAUDE.md` §7: new "Call recording (Phase 4)" paragraph — REST-API recording on the
+  in-progress leg was a considered choice (`<Enqueue>` has no record attribute; conference
+  recording needs Phase 5's reservation acceptance), and **Phase 5 should migrate to
+  conference recording once reservations land**.
+- `CLAUDE.md` §9: `AI_DRY_RUN` documented in the env section as a cost rail — lives in
+  `wrangler.jsonc` vars (not `.env`), no local simulator, `wrangler dev` proxies the AI
+  binding to the real API and bills the account, flip only with Steven in-session.
+- `CLAUDE.md` §11: recording-consent open question flipped to `[x]` with the full decision
+  (off by default as DDL, announcement forced, wording per-org, 2026-07-16) and its
+  executable pin (`test/voice-route.test.ts`'s consent invariant).
+- Verified: `git grep -n "AI_DRY_RUN" CLAUDE.md` → §7 + §9 hits;
+  `git grep -n "transcript_status" docs/design/... CLAUDE.md` → hits in both;
+  `git grep -n "Recording consent / prompts" CLAUDE.md` → shows `[x]`. Gate exits 0
+  (105/105 tests, typecheck, lint, build).
+- Commit `e0a8ac6`, pushed to origin (`d148893..e0a8ac6`).
