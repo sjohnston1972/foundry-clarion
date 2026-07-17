@@ -8,10 +8,11 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
-  "vars": { "AUTH_ENFORCE": "false", "TWILIO_DRY_RUN": "true", "AI_DRY_RUN": "true" },
+  "routes": [ { "pattern": "clarion.foundry-ns.com", "custom_domain": true } ],
+  "vars": { "AUTH_ENFORCE": "true", "TWILIO_DRY_RUN": "true", "AI_DRY_RUN": "true" },
   "d1_databases": [
-    { "binding": "DB", "database_name": "foundry-clarion-db", "database_id": "REPLACE_AFTER_TASK_2", "migrations_dir": "migrations" },
-    { "binding": "WORKSPACE_DB", "database_name": "skills-foundry-db", "database_id": "REPLACE_WITH_WORKSPACE_DB_ID" }
+    { "binding": "DB", "database_name": "foundry-clarion-db", "database_id": "6d87fbbc-d37c-47d1-b26d-39ae872572f4", "migrations_dir": "migrations" },
+    { "binding": "WORKSPACE_DB", "database_name": "skills-foundry-db", "database_id": "2bdbcd5d-9559-434b-87b0-e2db99f8ce97" }
   ],
   "r2_buckets": [ { "binding": "RECORDINGS", "bucket_name": "foundry-clarion-recordings" } ],
   "ai": { "binding": "AI" },
