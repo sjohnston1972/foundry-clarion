@@ -13,6 +13,7 @@ import { ivrVoice } from './routes/ivr-voice'
 import { settings } from './routes/settings'
 import { reports } from './routes/reports'
 import { recordings } from './routes/recordings'
+import { ivr } from './routes/ivr'
 import { dev } from './routes/dev'
 import { touchOrgDirectory } from './db/directory'
 import { resolveClarionRole } from './lib/auth'
@@ -90,5 +91,6 @@ export function createApp() {
   app.route('/settings', settings)
   app.route('/reports', reports)
   app.route('/recordings', recordings)
+  app.route('/ivr', ivr)
   return app
 }
