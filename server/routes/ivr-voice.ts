@@ -5,6 +5,9 @@ import { isValidTwilioSignature } from '../lib/twilio/signature'
 import { getIvrFlowById } from '../db/ivr-flows'
 import { getQueueById } from '../db/queues'
 import { getOrgSettings, DEFAULT_ANNOUNCEMENT } from '../db/settings'
+import { insertVoicemail } from '../db/voicemails'
+import { fetchRecordingMedia } from '../lib/twilio/provisioning'
+import { transcribeVoicemail } from '../lib/ai/transcribe'
 import { interpret, type Vars } from '../lib/ivr/interpret'
 import type { IvrFlowDefinition } from '../lib/ivr/graph'
 
@@ -103,4 +106,43 @@ ivrVoice.post('/ivr', async (c) => {
   })
 
   return twiml(result.twiml)
+})
+
+// POST /api/voice/voicemail?orgId=<org>&flowId=<flow>&callSid=<sid> — the voicemail node's
+// recordingStatusCallback (and action). Stores audio to R2 + a cc_voicemails row, then hands
+// transcription off via waitUntil, mirroring the Phase 4 call-recording pipeline.
+ivrVoice.post('/voicemail', async (c) => {
+  const params = await parseFormParams(c.req.raw)
+  const signature = c.req.header('X-Twilio-Signature')
+  if (!(await isValidTwilioSignature(c.env.TWILIO_AUTH_TOKEN, c.req.url, params, signature ?? null))) {
+    return err(c, 'bad_signature', 'Invalid Twilio signature', 403)
+  }
+
+  const orgId = c.req.query('orgId')
+  if (!orgId) return err(c, 'bad_input', 'orgId is required', 400)
+  if ((params.RecordingStatus ?? '') !== 'completed') return c.body(null, 204)
+
+  const callSid = params.CallSid ?? c.req.query('callSid')
+  const recordingSid = params.RecordingSid
+  if (!callSid || !recordingSid) return err(c, 'bad_input', 'CallSid and RecordingSid are required', 400)
+
+  // The flow link is best-effort (cc_voicemails.flow_id is nullable, ON DELETE SET NULL):
+  // an unknown/cross-org flowId just means we don't attribute the voicemail to a flow.
+  const flowIdParam = c.req.query('flowId')
+  const flow = flowIdParam ? await getIvrFlowById(c.env.DB, orgId, flowIdParam) : null
+
+  const key = `orgs/${orgId}/voicemails/${callSid}/${recordingSid}.mp3`
+  const bytes = await fetchRecordingMedia(c.env, { recordingSid, mediaUrl: params.RecordingUrl ?? '' })
+  await c.env.RECORDINGS.put(key, bytes)
+
+  const id = crypto.randomUUID()
+  await insertVoicemail(c.env.DB, {
+    id, organizationId: orgId, flowId: flow?.id ?? null, twilioCallSid: callSid,
+    fromE164: params.From ?? null, r2Key: key,
+    durationS: params.RecordingDuration ? Number(params.RecordingDuration) : null,
+    createdAt: Date.now(),
+  })
+  // Hand transcription off out-of-band — Twilio must never wait on Whisper.
+  c.executionCtx.waitUntil(transcribeVoicemail(c.env, { orgId, voicemailId: id, r2Key: key }))
+  return c.body(null, 204)
 })

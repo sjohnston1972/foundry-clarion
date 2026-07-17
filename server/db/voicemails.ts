@@ -79,3 +79,15 @@ export async function listVoicemails(db: D1Database, orgId: string): Promise<Voi
     .all<VoicemailRow>()
   return results.map(toVoicemail)
 }
+
+export async function setVoicemailTranscript(
+  db: D1Database,
+  orgId: string,
+  id: string,
+  patch: { transcriptR2Key: string | null; transcriptStatus: TranscriptStatus },
+): Promise<void> {
+  await db
+    .prepare(`UPDATE cc_voicemails SET transcript_r2_key = ?, transcript_status = ? WHERE organization_id = ? AND id = ?`)
+    .bind(patch.transcriptR2Key, patch.transcriptStatus, orgId, id)
+    .run()
+}

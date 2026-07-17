@@ -1,5 +1,6 @@
 import type { Bindings } from '../../types'
 import { setTranscript } from '../../db/recordings'
+import { setVoicemailTranscript } from '../../db/voicemails'
 
 export type Transcript = { text: string; model: string; dryRun: boolean }
 
@@ -36,5 +37,25 @@ export async function transcribeRecording(
   } catch (e) {
     console.error('transcribeRecording failed', e)
     await setTranscript(env.DB, opts.orgId, opts.recordingId, { transcriptR2Key: null, transcriptStatus: 'failed' })
+  }
+}
+
+/** R2 -> Whisper -> R2 + cc_voicemails. Same pipeline as transcribeRecording, different table. */
+export async function transcribeVoicemail(
+  env: Bindings, opts: { orgId: string; voicemailId: string; r2Key: string },
+): Promise<void> {
+  try {
+    const obj = await env.RECORDINGS.get(opts.r2Key)
+    if (!obj) {
+      await setVoicemailTranscript(env.DB, opts.orgId, opts.voicemailId, { transcriptR2Key: null, transcriptStatus: 'failed' })
+      return
+    }
+    const transcript = await transcribeAudio(env, await obj.arrayBuffer())
+    const key = `${opts.r2Key.replace(/\.mp3$/, '')}.transcript.json`
+    await env.RECORDINGS.put(key, JSON.stringify(transcript))
+    await setVoicemailTranscript(env.DB, opts.orgId, opts.voicemailId, { transcriptR2Key: key, transcriptStatus: 'done' })
+  } catch (e) {
+    console.error('transcribeVoicemail failed', e)
+    await setVoicemailTranscript(env.DB, opts.orgId, opts.voicemailId, { transcriptR2Key: null, transcriptStatus: 'failed' })
   }
 }
