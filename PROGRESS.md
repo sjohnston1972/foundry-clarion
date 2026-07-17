@@ -73,3 +73,25 @@ calls, businessHours open/closed with injected `now`, and the MAX_STEPS=50
 loop guard. Full suite green: 32 files, 138 tests. `npm run typecheck:server`
 clean. Committed as 3d53891 and pushed to `feat/ivr-builder`.
 Next: Step 5 — interpreter webhook (`server/routes/ivr-voice.ts`).
+
+### 2026-07-17 — Step 5 done: interpreter webhook
+
+Added `server/routes/ivr-voice.ts` — `POST /api/voice/ivr?orgId=&flowId=[&node=&vars=]`,
+mounted alongside `voice` in `server/app.ts` (outside the AuthPak gate, same
+X-Twilio-Signature validation). It's the thin I/O shell around Step 4's
+pure `interpret()`: resolves the flow (cross-org/unknown -> 404, never
+403), decodes the base64 `vars` blob, fetches `routeToQueue` workflow SIDs
+and org recording-consent settings, builds the Gather action URL fresh
+per node/vars (so state round-trips through the query string with no
+server-side session, per the spec), and wraps the result in `<Response>`.
+`test/ivr-voice.test.ts` (8 tests, mirrors `voice-route.test.ts`) drives
+this through real HTTP requests via `createApp().request()`: signature
+required, entry walks to the first Gather, a mapped digit reaches
+`<Enqueue>`, a Gather timeout follows "timeout" to Hangup, an unmapped
+digit follows "invalid" and re-prompts, unknown flow and cross-org flow
+both -> 404. Digit-callback tests parse the actual `action=` URL out of
+the entry response rather than hand-constructing it, so the test also
+exercises the URL-building code path. Full suite green: 33 files, 146
+tests. `npm run typecheck:server` clean. Committed as dcffa1c and pushed
+to `feat/ivr-builder`.
+Next: Step 6 — voicemail callback (`POST /api/voice/voicemail`).
