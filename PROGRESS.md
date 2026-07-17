@@ -173,3 +173,20 @@ this step (nothing changed in the working tree).
 Next: Step 10 — ReactFlow dep + flow list page (`src/pages/IvrFlows.tsx`).
 Frontend arc begins here; steps 10-13 are verified by `npm run build`
 (typecheck) rather than vitest, per the plan's notes.
+
+### 2026-07-17 — Step 10 done: ReactFlow dep + flow list page
+
+`npm i @xyflow/react` (v12.11.2, dependency only — the canvas itself is
+Step 11). Added `src/pages/IvrFlows.tsx`: list/create/delete against the
+Step 7 CRUD API, mirroring `Queues.tsx`'s structure (Card/CardHead,
+TableSkeleton/EmptyState/ErrorState, a create form, react-query
+invalidation on mutation success). Rows show name, status badge, and
+last-updated timestamp — deliberately no edit link yet, since
+`IvrEditor.tsx` doesn't exist until Step 11 and a link to a route that
+isn't wired up would be dead weight. Nav entry "IVR flows" added to
+`AppShell.tsx` (Workflow icon from lucide-react, `minRole: 'supervisor'`
+matching the list API's own role gate) and route `/ivr` in `App.tsx`.
+`npm run build` passes (tsc -b + vite build, one pre-existing
+"chunk >500kB" advisory warning, not an error). Committed as d096fef and
+pushed to `feat/ivr-builder`.
+Next: Step 11 — editor canvas (`src/pages/IvrEditor.tsx`).
