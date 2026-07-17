@@ -9,6 +9,7 @@ import '@xyflow/react/dist/style.css'
 import { Button, Badge, Loader, ErrorState } from '../components/ui'
 import { IvrCanvasNode, type IvrCanvasNodeData } from '../components/ivr/IvrCanvasNode'
 import { ConfigPanel, type Selection } from '../components/ivr/ConfigPanel'
+import { SimulatorPanel } from '../components/ivr/SimulatorPanel'
 import { NODE_META, NODE_TYPES, branchOptionsFor } from '../components/ivr/nodeMeta'
 import { fetchJson } from '../lib/api'
 import { validateFlow } from '../lib/ivr/validate'
@@ -58,6 +59,9 @@ function IvrEditorCanvas({ flow, queues }: { flow: IvrFlow; queues: Queue[] }) {
   const [nodes, setNodes] = useState<Node[]>(() => toFlowNodes(flow.definition.nodes))
   const [edges, setEdges] = useState<Edge[]>(() => toFlowEdges(flow.definition.edges, flow.definition.nodes))
   const [selection, setSelection] = useState<Selection>(null)
+  const [rightTab, setRightTab] = useState<'inspector' | 'test'>('inspector')
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(new Set())
+  const [highlightedEdgeIds, setHighlightedEdgeIds] = useState<Set<string>>(new Set())
 
   const hasStart = nodes.some((n) => n.type === 'start')
 
@@ -132,6 +136,27 @@ function IvrEditorCanvas({ flow, queues }: { flow: IvrFlow; queues: Queue[] }) {
     return edge ? { kind: 'edge', edge } : null
   }, [selection, nodes, edges])
 
+  // The simulator walks whatever is currently on the canvas, not the last-saved copy —
+  // so testing a flow doesn't require saving it first.
+  const currentDefinition = useMemo(() => fromFlow(nodes, edges), [nodes, edges])
+
+  // Rendered separately from `nodes`/`edges` (the edit source of truth) so the simulator's
+  // path highlight is pure presentation — style/className on the Node/Edge objects is
+  // applied by ReactFlow to its own wrapper elements, no custom node/edge code needed.
+  const displayNodes = useMemo(
+    () => nodes.map((n) => (highlightedNodeIds.has(n.id) ? { ...n, style: { ...n.style, outline: '2px solid var(--color-accent)', outlineOffset: 2 } } : n)),
+    [nodes, highlightedNodeIds],
+  )
+  const displayEdges = useMemo(
+    () => edges.map((e) => (highlightedEdgeIds.has(e.id) ? { ...e, animated: true, style: { ...e.style, stroke: 'var(--color-accent)', strokeWidth: 2 } } : e)),
+    [edges, highlightedEdgeIds],
+  )
+
+  const clearHighlights = () => {
+    setHighlightedNodeIds(new Set())
+    setHighlightedEdgeIds(new Set())
+  }
+
   return (
     <div className="relative flex h-[calc(100vh-8rem)] gap-4">
       <aside className="w-48 shrink-0 space-y-1 overflow-y-auto rounded-[var(--radius-card)] border border-line bg-surface p-3">
@@ -157,8 +182,8 @@ function IvrEditorCanvas({ flow, queues }: { flow: IvrFlow; queues: Queue[] }) {
 
       <div className="relative flex-1 overflow-hidden rounded-[var(--radius-card)] border border-line bg-canvas">
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={displayNodes}
+          edges={displayEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -173,14 +198,43 @@ function IvrEditorCanvas({ flow, queues }: { flow: IvrFlow; queues: Queue[] }) {
         </ReactFlow>
       </div>
 
-      <aside className="w-72 shrink-0 rounded-[var(--radius-card)] border border-line bg-surface">
-        <ConfigPanel
-          selection={liveSelection}
-          queues={queues}
-          onUpdateNodeConfig={updateNodeConfig}
-          onUpdateEdgeBranch={updateEdgeBranch}
-          onDeleteSelection={deleteSelection}
-        />
+      <aside className="flex w-72 shrink-0 flex-col rounded-[var(--radius-card)] border border-line bg-surface">
+        <div className="flex border-b border-line px-2 pt-2">
+          {(['inspector', 'test'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => {
+                setRightTab(tab)
+                if (tab === 'inspector') clearHighlights()
+              }}
+              className={`rounded-t-lg px-3 py-1.5 text-[13px] font-medium ${
+                rightTab === tab ? 'border-b-2 border-[var(--color-accent)] text-ink' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {tab === 'inspector' ? 'Inspector' : 'Test'}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {rightTab === 'inspector' ? (
+            <ConfigPanel
+              selection={liveSelection}
+              queues={queues}
+              onUpdateNodeConfig={updateNodeConfig}
+              onUpdateEdgeBranch={updateEdgeBranch}
+              onDeleteSelection={deleteSelection}
+            />
+          ) : (
+            <SimulatorPanel
+              flow={currentDefinition}
+              onHighlight={(nodeIds, edgeIds) => {
+                setHighlightedNodeIds(nodeIds)
+                setHighlightedEdgeIds(edgeIds)
+              }}
+            />
+          )}
+        </div>
       </aside>
 
       <div className="absolute right-6 top-6 flex flex-col items-end gap-2">
