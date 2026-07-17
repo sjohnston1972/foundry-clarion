@@ -233,3 +233,37 @@ Append one timestamped entry per completed step below. Do not rewrite history.
 - Verified: `npx vitest run test/recordings-route.test.ts` → 5/5. Gate exits 0 (104/104
   tests, typecheck, lint, build).
 - Commit `add90b6`, pushed to origin (`b8e40f2..add90b6`).
+
+## 2026-07-16 22:48 — Step 11 done: Settings page (toggle + consent copy, Playwright-verified)
+
+- `src/pages/Settings.tsx` (new, routed at `/settings`, admin-only nav entry in `AppShell`
+  via a `clarionRole === 'admin'` filter): vendored primitives only. The toggle's on-screen
+  copy states — as the plan requires — that turning recording on **also turns on the caller
+  announcement**, that it cannot be switched off separately, and that **silent recording is
+  not available**. Status badge (`Recording on`/`Recording off`) in the card head; a
+  separate card holds the announcement-wording field (blank ⇒ default wording, sent as
+  `null`).
+- **Environment bug found and routed around**: an orphaned Vite dev server (from an earlier
+  session, not one of this run's tracked tasks) was squatting on `:5173` with a broken
+  proxy — Playwright's `reuseExistingServer` silently reused it and every `/api` call
+  502'd. I couldn't identify/kill the orphan PID (netstat/Get-NetTCPConnection are
+  approval-gated in this environment), so `playwright.config.ts` now runs E2E Vite on a
+  dedicated port (`5175`, `--strictPort`, `reuseExistingServer: false`) — Playwright always
+  owns its instance, and any future squatter fails the run loudly at startup. The stale
+  process on `:5173` is still alive — **note for Steven**: kill it at leisure (anything
+  holding 5173).
+- **Test-side locator bug fixed**: `getByText('Recording on')` is case-insensitive
+  substring matching and also hit the consent paragraph ("…recording on also turns on…")
+  and the button label — a strict-mode violation. Badge assertions now use
+  `{ exact: true }`.
+- `test/e2e/settings-page.spec.ts`: admin via DEV_AUTH (`org-p4-step11`), forces recording
+  **off** via the API first (deterministic reruns), loads `/settings`, asserts the Settings
+  nav entry + both consent-copy phrases, toggles on, asserts the badge, reloads, asserts it
+  **persisted** (badge + "Turn recording off" button), screenshots to
+  `docs/runs/2026-07-16-phase-4-recording/step-11-settings.png` (viewed: accent
+  "Recording on" badge, bolded consent copy, danger off-button, wording card).
+- Housekeeping: full-suite Playwright reruns re-screenshot Phase 3's archived pages;
+  restored `docs/runs/2026-07-15-phase-3-and-ui/*.png` so archived proofs stay as captured.
+- Verified: `npx playwright test` → 8/8 (all specs). Gate exits 0 (104/104 tests,
+  typecheck, lint, build).
+- Commit `a03bbd4`, pushed to origin (`6f438d3..a03bbd4`).
