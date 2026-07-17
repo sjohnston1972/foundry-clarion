@@ -149,11 +149,12 @@ Canonical schema is in `docs/design/foundry-clarion-design.md` §4; highlights:
 | `cc_skills` | Skill catalog per org | id, org_id, name |
 | `cc_queues` / `cc_queue_members` | Queues (TaskRouter Workflows) + membership | id, org_id, name, twilio_workflow_sid, strategy / queue_id, agent_id, priority |
 | `cc_hunt_groups` | Simple ring groups | id, org_id, name, strategy |
-| `cc_ivr_flows` | Studio flow references | id, org_id, name, twilio_flow_sid, definition_json |
+| `cc_ivr_flows` | **Native TwiML interpreter flow graphs** (v1, 2026-07-17 — supersedes the original "Studio flow reference" assumption; see §7) | id, org_id, name, status (draft/active), definition_json, updated_at |
 | `cc_numbers` | Provisioned Twilio numbers | id, org_id, e164, twilio_number_sid, assigned_kind, assigned_id |
 | `cc_calls` | Call log (reporting) | id, org_id, twilio_call_sid, from_e164, to_e164, queue_id, agent_id, disposition, duration_s, started_at |
 | `cc_org_settings` | Per-org recording settings — recording **off by default** (DDL, not app logic); announcement wording per-org | organization_id PK, recording_enabled (DEFAULT 0), announcement_text, updated_at |
 | `cc_recordings` | Recording metadata (audio in R2) — org-scoped by column, deliberately (leak test is a direct assertion) | id, organization_id, call_id, twilio_recording_sid, r2_key, duration_s, transcript_r2_key, transcript_status |
+| `cc_voicemails` | Voicemail audio metadata from IVR voicemail nodes (audio in R2, mirrors `cc_recordings`); `flow_id` is nullable (`ON DELETE SET NULL`) — best-effort attribution, not a hard link | id, organization_id, flow_id, twilio_call_sid, from_e164, r2_key, duration_s, transcript_r2_key, transcript_status, created_at |
 | `cc_audit_log` | Who changed what | id, org_id, user_id, action, meta_json, created_at |
 
 **Workspace linkage is by EMAIL, not FK.** Workspace itself joins logins to `resources` on
@@ -181,8 +182,13 @@ Twilio primitives:
 - **Voice API** — inbound/outbound calls, `<Response>` TwiML, call control.
 - **Conversations API** — if/when we add chat, SMS, WhatsApp. Keep the door
   open in the data model but don't build until asked.
-- **Studio** — for IVR flow definitions. Store the Flow SID; consider
-  round-tripping the JSON definition through our own UI.
+- ~~Studio~~ **IVR = Clarion-native TwiML interpreter, NOT Twilio Studio** (decided
+  2026-07-17, Steven — supersedes this row's original assumption). A ReactFlow editor
+  produces the flow graph JSON (`cc_ivr_flows.definition_json`); our own Worker walks it
+  and emits TwiML directly (`server/lib/ivr/interpret.ts`) rather than delegating to a
+  Studio Flow. Rationale: less external integration surface, fully testable in-Worker
+  under the dry-run rails, fits the "custom UI on raw Twilio, not Flex" philosophy (§2).
+  See `docs/superpowers/specs/2026-07-17-ivr-builder-design.md`.
 - **Programmable Voice SDK (browser)** — the agent's browser becomes a
   softphone. This is what makes the "custom UI" real.
 
@@ -198,6 +204,18 @@ textbook conference-recording approach needs reservation acceptance, which is Ph
 **Phase 5 should migrate to conference recording once reservations land**; at that point
 the REST call becomes redundant. Audio lands in R2 (`orgs/{org}/calls/{call}/{rec}.mp3`),
 transcripts via Workers AI Whisper behind `AI_DRY_RUN` (see §9).
+
+**IVR builder (v1, 2026-07-17):** flows are built visually (ReactFlow, `src/pages/IvrEditor.tsx`)
+and stored as a JSON graph in `cc_ivr_flows.definition_json`; `POST /api/voice/ivr`
+(`server/routes/ivr-voice.ts`) walks the graph server-side via the pure
+`server/lib/ivr/interpret.ts` core, emitting TwiML node-by-node until it must wait for
+caller input (menu/collect) or terminates (route-to-queue/voicemail/hangup). Call state
+(collected variables) rides in the Gather/Record action URL as base64-JSON — no
+server-side session; a D1/DO-per-CallSid is the documented scale path if that ever proves
+insufficient, not built in v1. **Attaching a flow to a real inbound number is Phase 5**
+(needs `cc_numbers` + live Twilio) — v1 executes fully under the dry-run rails, exercised
+by the in-browser simulator rather than a real call. See
+`docs/superpowers/specs/2026-07-17-ivr-builder-design.md`.
 
 **All Twilio credentials** live in the Worker env, never in the frontend.
 The browser gets short-lived Twilio Access Tokens minted by Clarion.
