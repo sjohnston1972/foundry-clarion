@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHead, Button, Badge, EmptyState, TableSkeleton, ErrorState } from '../components/ui'
 import { fetchJson } from '../lib/api'
@@ -37,6 +38,16 @@ export default function Agents() {
     },
   })
 
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const disableMutation = useMutation({
+    mutationFn: (id: string) => fetchJson<{ id: string }>(`/api/agents/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      setConfirmId(null)
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      queryClient.invalidateQueries({ queryKey: ['agents', 'candidates'] })
+    },
+  })
+
   return (
     <div className="space-y-6">
       <section aria-label="Agents">
@@ -56,11 +67,23 @@ export default function Agents() {
                     <div className="text-sm font-medium text-ink">{a.email}</div>
                     <div className="tabular text-xs text-muted">{a.twilioWorkerSid}</div>
                   </div>
-                  <Badge tone={a.status === 'offline' ? 'neutral' : 'accent'}>{a.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={a.status === 'offline' ? 'neutral' : 'accent'}>{a.status}</Badge>
+                    {confirmId === a.id ? (
+                      <>
+                        <span className="text-xs text-muted">Disable {a.email}?</span>
+                        <Button size="sm" variant="danger" disabled={disableMutation.isPending} onClick={() => disableMutation.mutate(a.id)}>Confirm</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setConfirmId(null)}>Cancel</Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="danger" onClick={() => setConfirmId(a.id)}>Disable</Button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
+          {disableMutation.isError && <p className="px-5 pb-4 text-sm text-rose-600">{(disableMutation.error as Error).message}</p>}
         </Card>
       </section>
 
