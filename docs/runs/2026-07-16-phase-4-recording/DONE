@@ -1,0 +1,62 @@
+# Run finished: Phase 4 — recording, transcripts, reporting (2026-07-16/17)
+
+All 14 steps complete, none via a rail or fallback. Archive:
+docs/runs/2026-07-16-phase-4-recording/ (PLAN.md, PROGRESS.md, step-11 + step-12
+screenshots). Branch: feat/clarion-phase-4-recording — EVERY COMMIT IS ON ORIGIN
+(the Phase 3 push blocker stayed resolved all run). Final gate: 105/105 vitest
+tests across 28 files, 9/9 Playwright specs, typecheck, lint, build — all green.
+
+## Rails held (the whole point of running this autonomously)
+
+- TWILIO_DRY_RUN never left "true": zero Twilio account mutations.
+- AI_DRY_RUN never left "true": zero Workers AI calls, zero spend. The rail is
+  now also an assertion (test/transcribe.test.ts: a throwing fake AI proves no
+  AI.run escapes dry-run).
+- DEV_AUTH appears in no deployed config.
+- The R2 bucket exists only in Miniflare local state; nothing was created in the
+  Cloudflare account.
+
+## What landed
+
+- Arc A (Capture): cc_org_settings (recording OFF by default as DDL) +
+  cc_recordings (org-scoped, transcript_status seam); the consent invariant in
+  TwiML (<Say> only when recording is enabled, no separate announcement toggle,
+  pinned by a named test); recording start on the in-progress leg (REdryrun_*,
+  best-effort); recordingStatusCallback -> real R2 write + metadata row.
+- Arc B (Transcripts): transcribeAudio behind AI_DRY_RUN (Whisper live path
+  written but unreachable); transcribeRecording orchestration (R2 -> Whisper ->
+  R2 + D1) that never throws — failure sets transcript_status='failed' and the
+  recording survives; wired into the webhook via ctx.waitUntil (Twilio never
+  waits on Whisper; ordering proven in tests).
+- Arc C (Reporting): admin Settings API + page (toggle copy states the
+  announcement is inseparable — silent recording unavailable on-screen);
+  supervisor Reports API (bound-values-only filters, aggregates) + page (Stat
+  tiles, filterable calls, audio playback, transcript panel with distinct
+  pending/failed states); recording media/transcript endpoints (cross-org
+  reads are 404, never 403). Playwright seeds through the real signed webhooks.
+- Docs: design §4/§9 and CLAUDE.md §6/§7/§9/§11 match reality; Phase 4's gate
+  recorded as cleared.
+
+## Known issues / notes for next session
+
+1. An orphaned Vite dev server still squats on :5173 with a broken proxy (from
+   a pre-run session; PID untraceable without approval-gated netstat). E2E now
+   runs on :5175 (strictPort, never reuse) so it's inert — but kill whatever
+   holds :5173 when convenient.
+2. GET /api/recordings?callId= was added beyond the plan's literal text — the
+   Reports page needs recording ids and nothing exposed them. Supervisor-gated,
+   org-scoped, tested. Flagged in PROGRESS Step 12.
+3. Standing debts unchanged and deliberate: cc_numbers/dialed-number lookup
+   (webhooks still use ?orgId=&queueId=), conference recording (Phase 5, noted
+   in CLAUDE.md §7), pool-workers-on-Windows (retry on Linux CI or vitest 4),
+   AUTH_ENFORCE still "false" (pre-cutover default).
+
+## Recommended next run
+
+Either Phase 5 (reservation acceptance -> conference recording migration,
+supervisor monitor/whisper/barge, click-to-call) or the deploy milestone (fill
+REPLACE_* database ids, create the real R2 bucket + TaskRouter workspace,
+wrangler deploy, AUTH_ENFORCE cutover). Decisions needed from Steven first:
+(a) merge PR for feat/clarion-phase-4-recording (branch is fully pushed;
+Steven owns merges), (b) Phase 5 vs deploy, (c) if deploy: explicit in-session
+OK for the Twilio/Cloudflare account mutations and flipping the dry-run rails.

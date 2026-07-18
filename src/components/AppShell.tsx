@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useOutletContext } from 'react-router-dom'
 import type { ComponentType } from 'react'
-import { Phone, Users, ListOrdered, LayoutDashboard } from 'lucide-react'
+import { Phone, Users, ListOrdered, LayoutDashboard, BarChart3, Settings, Workflow } from 'lucide-react'
 import type { AuthStatus } from '../lib/session'
 import { cn } from '../lib/utils'
 
@@ -10,15 +10,23 @@ import { cn } from '../lib/utils'
  * AppShell.tsx (641 lines, wired into departments/plans/billing/tickets/a
  * command palette Clarion doesn't have) — see CLAUDE.md §14.
  */
-const NAV: Array<{ to: string; label: string; icon: ComponentType<{ className?: string }>; end?: boolean }> = [
+const RANK = { agent: 1, supervisor: 2, admin: 3 } as const
+type Role = keyof typeof RANK
+
+const NAV: Array<{ to: string; label: string; icon: ComponentType<{ className?: string }>; end?: boolean; minRole?: Role }> = [
   { to: '/', label: 'Softphone', icon: Phone, end: true },
   { to: '/agents', label: 'Agents', icon: Users },
   { to: '/queues', label: 'Queues', icon: ListOrdered },
+  { to: '/ivr', label: 'IVR flows', icon: Workflow, minRole: 'supervisor' },
   { to: '/wallboard', label: 'Wallboard', icon: LayoutDashboard },
+  { to: '/reports', label: 'Reports', icon: BarChart3, minRole: 'supervisor' },
+  { to: '/settings', label: 'Settings', icon: Settings, minRole: 'admin' },
 ]
 
 export function AppShell() {
   const status = useOutletContext<AuthStatus>()
+  const role = status.clarionRole
+  const nav = NAV.filter((item) => !item.minRole || (role && RANK[role] >= RANK[item.minRole]))
   return (
     <div className="flex min-h-full">
       <aside className="w-56 shrink-0 border-r border-line bg-surface p-4">
@@ -26,7 +34,7 @@ export function AppShell() {
           Foundry <span className="text-[var(--color-accent)]">Clarion</span>
         </div>
         <nav aria-label="Primary" className="space-y-1">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

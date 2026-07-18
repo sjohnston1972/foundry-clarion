@@ -19,6 +19,7 @@
     "@foundry/auth": "file:vendor/foundry-auth-0.1.0.tgz",
     "@tanstack/react-query": "^5.71.0",
     "@twilio/voice-sdk": "^2.18.3",
+    "@xyflow/react": "^12.11.2",
     "clsx": "^2.1.1",
     "hono": "^4.7.0",
     "jose": "^5.10.0",

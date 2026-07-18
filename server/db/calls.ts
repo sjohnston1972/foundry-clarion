@@ -64,6 +64,46 @@ export async function listCallsForOrg(db: D1Database, orgId: string): Promise<Ca
   return results.map(toCall)
 }
 
+export type CallFilter = { from?: string; to?: string; queueId?: string; agentId?: string; disposition?: string }
+export type CallSummary = { total: number; answered: number; abandoned: number; avgDurationS: number }
+
+/** Builds a WHERE from bound values only — column names are never interpolated. */
+function whereFor(orgId: string, f: CallFilter): { sql: string; binds: (string | number)[] } {
+  const clauses = ['organization_id = ?']
+  const binds: (string | number)[] = [orgId]
+  if (f.from) { clauses.push('started_at >= ?'); binds.push(f.from) }
+  if (f.to) { clauses.push('started_at <= ?'); binds.push(f.to) }
+  if (f.queueId) { clauses.push('queue_id = ?'); binds.push(f.queueId) }
+  if (f.agentId) { clauses.push('agent_id = ?'); binds.push(f.agentId) }
+  if (f.disposition) { clauses.push('disposition = ?'); binds.push(f.disposition) }
+  return { sql: clauses.join(' AND '), binds }
+}
+
+export async function queryCalls(db: D1Database, orgId: string, f: CallFilter): Promise<Call[]> {
+  const { sql, binds } = whereFor(orgId, f)
+  const { results } = await db
+    .prepare(`SELECT ${COLS} FROM cc_calls WHERE ${sql} ORDER BY started_at DESC LIMIT 500`)
+    .bind(...binds)
+    .all<CallRow>()
+  return results.map(toCall)
+}
+
+export async function summarizeCalls(db: D1Database, orgId: string, f: CallFilter): Promise<CallSummary> {
+  const { sql, binds } = whereFor(orgId, f)
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS total,
+                     SUM(CASE WHEN agent_id IS NOT NULL THEN 1 ELSE 0 END) AS answered,
+                     SUM(CASE WHEN agent_id IS NULL THEN 1 ELSE 0 END) AS abandoned,
+                     COALESCE(AVG(duration_s), 0) AS avg_duration_s
+              FROM cc_calls WHERE ${sql}`)
+    .bind(...binds)
+    .first<{ total: number; answered: number; abandoned: number; avg_duration_s: number }>()
+  return {
+    total: row?.total ?? 0, answered: row?.answered ?? 0, abandoned: row?.abandoned ?? 0,
+    avgDurationS: Math.round(row?.avg_duration_s ?? 0),
+  }
+}
+
 export async function updateCallOutcome(
   db: D1Database,
   orgId: string,

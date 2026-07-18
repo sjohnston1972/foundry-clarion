@@ -9,7 +9,11 @@ export default defineConfig({
   testDir: './test/e2e',
   timeout: 30_000,
   use: {
-    baseURL: 'http://localhost:5173',
+    // E2E runs on a dedicated Vite port (not 5173): an orphaned dev server on the
+    // default port once got silently reused with a broken proxy (502s). strictPort +
+    // reuseExistingServer:false below make Playwright always own this instance —
+    // a squatter fails the run loudly at startup instead of mysteriously mid-test.
+    baseURL: 'http://localhost:5175',
   },
   webServer: [
     {
@@ -19,9 +23,9 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: 'npm run dev',
-      url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      command: 'npm run dev -- --port 5175 --strictPort',
+      url: 'http://localhost:5175',
+      reuseExistingServer: false,
       timeout: 30_000,
     },
   ],

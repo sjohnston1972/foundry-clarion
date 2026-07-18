@@ -4,6 +4,10 @@ import { err } from '../lib/http'
 import { isValidTwilioSignature } from '../lib/twilio/signature'
 import { getQueueById } from '../db/queues'
 import { insertCall, getCallBySid, updateCallOutcome } from '../db/calls'
+import { getOrgSettings, DEFAULT_ANNOUNCEMENT } from '../db/settings'
+import { insertRecording } from '../db/recordings'
+import { startCallRecording, fetchRecordingMedia } from '../lib/twilio/provisioning'
+import { transcribeRecording } from '../lib/ai/transcribe'
 import { pushPresence } from './realtime'
 
 // Twilio-called webhooks, not browser-called: outside the AuthPak gate (mounted before it
@@ -43,7 +47,14 @@ voice.post('/inbound', async (c) => {
   if (!queue?.twilioWorkflowSid) return err(c, 'not_found', 'Queue not found or not provisioned', 404)
 
   const task = escapeXml(JSON.stringify({ organization_id: orgId, from: params.From ?? '', to: params.To ?? '' }))
-  return twiml(`<Response><Enqueue workflowSid="${queue.twilioWorkflowSid}"><Task>${task}</Task></Enqueue></Response>`)
+  // The consent invariant (Steven, 2026-07-16): the announcement is a function of
+  // recording_enabled — never a separate toggle. Recording off => TwiML is
+  // byte-for-byte what Phase 3 emits.
+  const settings = await getOrgSettings(c.env.DB, orgId)
+  const say = settings.recordingEnabled
+    ? `<Say>${escapeXml(settings.announcementText ?? DEFAULT_ANNOUNCEMENT)}</Say>`
+    : ''
+  return twiml(`<Response>${say}<Enqueue workflowSid="${queue.twilioWorkflowSid}"><Task>${task}</Task></Enqueue></Response>`)
 })
 
 // POST /api/voice/status?orgId=...&queueId=... — records call state into cc_calls and
@@ -71,6 +82,55 @@ voice.post('/status', async (c) => {
   }
   await updateCallOutcome(c.env.DB, orgId, callSid, { disposition: status, durationS, agentId: existing?.agentId ?? null })
 
+  // Best-effort recording start, mirroring pushPresence's non-fatal posture — a
+  // recording failure must never fail the status webhook. Only fires when the org
+  // has recording enabled (the consent invariant gates this at the settings layer).
+  if (params.CallStatus === 'in-progress') {
+    const settings = await getOrgSettings(c.env.DB, orgId)
+    if (settings.recordingEnabled) {
+      const cb = new URL(c.req.url)
+      cb.pathname = '/api/voice/recording' // keeps ?orgId=&queueId=
+      try {
+        await startCallRecording(c.env, { callSid, recordingStatusCallback: cb.toString() })
+      } catch (e) {
+        console.error('startCallRecording failed', e)
+      }
+    }
+  }
+
   await pushPresence(c.env, orgId, { identity: `call:${callSid}`, status, at: Date.now() })
+  return c.body(null, 204)
+})
+
+// POST /api/voice/recording?orgId=... — Twilio's recordingStatusCallback. Audio bytes
+// land in R2 (real even in dry-run — Miniflare simulates R2 locally); D1 holds metadata only.
+voice.post('/recording', async (c) => {
+  const params = await parseFormParams(c.req.raw)
+  const signature = c.req.header('X-Twilio-Signature')
+  if (!(await isValidTwilioSignature(c.env.TWILIO_AUTH_TOKEN, c.req.url, params, signature ?? null))) {
+    return err(c, 'bad_signature', 'Invalid Twilio signature', 403)
+  }
+  const orgId = c.req.query('orgId')
+  if (!orgId) return err(c, 'bad_input', 'orgId is required', 400)
+  if ((params.RecordingStatus ?? '') !== 'completed') return c.body(null, 204)
+
+  const callSid = params.CallSid
+  const recordingSid = params.RecordingSid
+  if (!callSid || !recordingSid) return err(c, 'bad_input', 'CallSid and RecordingSid are required', 400)
+
+  const call = await getCallBySid(c.env.DB, orgId, callSid)
+  if (!call) return err(c, 'not_found', 'Call not found', 404)
+
+  const key = `orgs/${orgId}/calls/${callSid}/${recordingSid}.mp3`
+  const bytes = await fetchRecordingMedia(c.env, { recordingSid, mediaUrl: params.RecordingUrl ?? '' })
+  await c.env.RECORDINGS.put(key, bytes)
+
+  const id = crypto.randomUUID()
+  await insertRecording(c.env.DB, {
+    id, organizationId: orgId, callId: call.id, twilioRecordingSid: recordingSid, r2Key: key,
+    durationS: params.RecordingDuration ? Number(params.RecordingDuration) : null,
+  })
+  // Hand transcription off out-of-band — Twilio must never wait on Whisper.
+  c.executionCtx.waitUntil(transcribeRecording(c.env, { orgId, recordingId: id, r2Key: key }))
   return c.body(null, 204)
 })
